@@ -1,20 +1,51 @@
-import javax.crypto.KeyGenerator;
-import javax.crypto.spec.DHParameterSpec;
 import java.math.BigInteger;
 import java.security.*;
+import java.security.interfaces.DSAPrivateKey;
+import java.security.interfaces.DSAPublicKey;
 import java.security.spec.*;
+import java.util.HashMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class KeyManager {
 
     private static Logger LOG = Logger.getLogger(KeyManager.class.getName());
+
     private static int bitSize = 1024;
     private static DSAParameterSpec dsaParameterSpec;
 
-    public static void main(String[] args) {
-        parseArgs(args);
+    private static ReadWriteLock rwLock;
+    private static HashMap<String, KeyPair> clients;
 
-        initializeEnvironment(bitSize);
+    private static KeyManagementServer kms;
+
+    private static boolean testRun = false;
+
+    public static void main(String[] args) {
+        try {
+            parseArgs(args);
+
+            initializeEnvironment(bitSize);
+            initializeClientStorage();
+
+            if (testRun) {
+                test();
+                return;
+            }
+
+            startKeyManagementServer();
+
+        } catch (Exception ex) {
+            LOG.severe(String.format("Error: %s", ex.getMessage()));
+        }
+    }
+
+    private static void initializeClientStorage() {
+        rwLock = new ReentrantReadWriteLock();
+        clients = new HashMap<>();
     }
 
     private static void initializeEnvironment(int bitSize) {
@@ -41,15 +72,117 @@ public class KeyManager {
     }
 
     private static void parseArgs(String[] args) {
-        if (args.length == 1) {
-            bitSize = Integer.parseInt(args[0]);
-            LOG.info(String.format("Using custom bit size: %d", bitSize));
-        } else {
+        int MAX_ARGS = 2;
+
+        if (args.length <= 0) {
             LOG.info(String.format("Using standard bit size %d", bitSize));
+            return;
+        }
+
+        if (args.length > MAX_ARGS) {
+            LOG.severe(String.format("Too many arguments encountered. Expected at most %d, got %d", MAX_ARGS, args.length));
+            System.exit(1);
+        }
+
+        for (int i = 0; i < args.length; i++) {
+            if (args[i].equals("test")) {
+                testRun = true;
+            }
+        }
+
+        if (testRun) {
+            LOG.info("This is a test run of the KMS");
+        }
+
+        for (int i = 0; i < args.length; i++) {
+            try {
+                bitSize = Integer.parseInt(args[i]);
+            } catch (NumberFormatException ex) { }
+        }
+
+        LOG.info(String.format("Using bit size: %d", bitSize));
+    }
+
+    private AlgorithmParameterSpec exposeDomainParameters() {
+        return dsaParameterSpec;
+    }
+
+    private static boolean enrollClient(String name) {
+        try {
+            KeyPairGenerator kpg = KeyPairGenerator.getInstance("DSA");
+            kpg.initialize(dsaParameterSpec);
+
+            KeyPair kp = kpg.generateKeyPair();
+            DSAPublicKey publicKey = (DSAPublicKey) kp.getPublic();
+            DSAPrivateKey privateKey = (DSAPrivateKey) kp.getPrivate();
+
+            LOG.info(String.format("Successfully created the key pair for the client '%s'.", name));
+
+            LOG.info("Checking the correctness of the generated values...");
+            if (!dsaParameterSpec.getG().modPow(privateKey.getX(), dsaParameterSpec.getP()).equals(publicKey.getY())) {
+                LOG.warning("Something's wrong with generated keys. Aborting...");
+                return false;
+            }
+
+            LOG.info("The generated keys are correct! Enrolling the client...");
+            updateClient(name, kp);
+            LOG.info(String.format("The client '%s' was successfully enrolled!", name));
+
+            return true;
+
+        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException ex) {
+            LOG.warning(String.format("Error enrolling a client '%s': %s", name, ex.getMessage()));
+            return false;
         }
     }
 
-    private DSAParameterSpec exposeDomainParameters() {
-        return dsaParameterSpec;
+    private static void updateClient(String name, KeyPair kp) {
+        Lock writeLock = rwLock.writeLock();
+        try {
+            writeLock.lock();
+            clients.put(name, kp);
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    private static PublicKey getClientPublicKey(String name) {
+        Lock readerLock = rwLock.readLock();
+        try {
+            readerLock.lock();
+            if (!clients.containsKey(name)) {
+                return null;
+            }
+
+            return clients.get(name).getPublic();
+
+        } finally {
+            readerLock.unlock();
+        }
+    }
+
+    private static void startKeyManagementServer() {
+        kms = new KeyManagementServer();
+        kms.Start();
+    }
+
+    public static void Log(Level level, String err) {
+        LOG.log(level, err);
+    }
+
+    /***
+     * This is a testing section.
+     * TODO: Enhance with more complex cases.
+     ***/
+    private static void test() {
+        String dummy = "lalala";
+
+        if (enrollClient(dummy)) {
+            DSAPublicKey publicKey = (DSAPublicKey) getClientPublicKey(dummy);
+            LOG.info(String.format("Successfully retrieved client's '%s' public key: %s",
+                    dummy, publicKey.getY().toString()));
+        } else {
+            LOG.warning(String.format("Enrolling of a client '%s' failed!", dummy));
+        }
     }
 }
