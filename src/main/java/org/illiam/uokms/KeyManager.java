@@ -1,3 +1,5 @@
+package org.illiam.uokms;
+
 import java.math.BigInteger;
 import java.security.*;
 import java.security.interfaces.DSAPrivateKey;
@@ -45,7 +47,7 @@ public class KeyManager {
 
     private static void initializeClientStorage() {
         rwLock = new ReentrantReadWriteLock();
-        clients = new HashMap<>();
+        clients = new HashMap<String, KeyPair>();
     }
 
     private static void initializeEnvironment(int bitSize) {
@@ -65,7 +67,13 @@ public class KeyManager {
                 LOG.info("Domain parameters were generated successfully!");
             }
 
-        } catch (InvalidParameterSpecException | InvalidParameterException | NoSuchAlgorithmException ex) {
+        } catch (InvalidParameterSpecException ex) {
+            LOG.severe(String.format("Error, exiting: %s", ex.getMessage()));
+            System.exit(1);
+        } catch (InvalidParameterException ex) {
+            LOG.severe(String.format("Error, exiting: %s", ex.getMessage()));
+            System.exit(1);
+        } catch (NoSuchAlgorithmException ex) {
             LOG.severe(String.format("Error, exiting: %s", ex.getMessage()));
             System.exit(1);
         }
@@ -130,7 +138,10 @@ public class KeyManager {
 
             return true;
 
-        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException ex) {
+        } catch (NoSuchAlgorithmException ex) {
+            LOG.warning(String.format("Error enrolling a client '%s': %s", name, ex.getMessage()));
+            return false;
+        } catch (InvalidAlgorithmParameterException ex) {
             LOG.warning(String.format("Error enrolling a client '%s': %s", name, ex.getMessage()));
             return false;
         }
