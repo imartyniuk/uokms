@@ -2,8 +2,9 @@ package org.illiam.uokms;
 
 import org.json.simple.JSONObject;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 public class Client {
@@ -16,16 +17,23 @@ public class Client {
     private static String kmsHost = "localhost";
     private static String stsHost = "localhost";
 
-    private static Socket kmsSocket;
+    private static final String packetEnd = "<FIN>";
+
+    private UUID uuid;
+    private Socket kmsSocket;
 
     public static void main(String[] args) {
         parseArgs(args);
 
-        String domainReq = genGetDomainRequest();
-        System.out.println(domainReq);
-
-        //runKms(kmsHost, kmsPort);
+        Client client = new Client();
+        client.runKms(kmsHost, kmsPort);
     }
+
+    private Client() {
+        uuid = UUID.randomUUID();
+        LOG.info(String.format("Created a client with an id: %s", uuid.toString()));
+    }
+
 
     private static void parseArgs(String[] args) {
         if (args.length > 0) {
@@ -39,15 +47,13 @@ public class Client {
         }
     }
 
-    private static void runKms(String kmsHost, int kmsPort) {
+    private void runKms(String kmsHost, int kmsPort) {
         try {
             kmsSocket = new Socket(kmsHost, kmsPort);
 
-           //OutputStream os = kmsSocket.getOutputStream();
-            //PrintWriter pw = new PrintWriter(os, true);
-
-            //String domainReq = genGetDomainRequest();
-            //System.out.println(domainReq);
+            sendMessage(kmsSocket, this.genGetDomainRequest());
+            String msg = receiveMessage(kmsSocket);
+            LOG.info(String.format("Received response: %s", msg));
 
             kmsSocket.close();
 
@@ -57,10 +63,33 @@ public class Client {
         }
     }
 
-    private static String genGetDomainRequest() {
+    private static void sendMessage(Socket socket, String msg) throws IOException {
+        OutputStream os = socket.getOutputStream();
+        PrintWriter pw = new PrintWriter(os, true);
+
+        System.out.println(msg);
+        pw.println(msg);
+        pw.println(packetEnd);
+    }
+
+    private static String receiveMessage(Socket socket) throws IOException {
+        InputStream is = socket.getInputStream();
+        BufferedReader br = new BufferedReader(new InputStreamReader(is));
+
+        StringBuilder msg = new StringBuilder();
+        String text;
+        do {
+            text = br.readLine();
+            msg.append(text);
+        } while(!text.equals(packetEnd));
+
+        return msg.toString();
+    }
+
+    private String genGetDomainRequest() {
         JSONObject jsonObject = new JSONObject();
 
-        jsonObject.put("name", "dummy");
+        jsonObject.put("name", "client-"+this.uuid.toString());
         jsonObject.put("method", "GetDomainParameters");
 
         return jsonObject.toJSONString();
