@@ -7,6 +7,11 @@ To compile everything run:
 or (recommended):
 `mvn compile` from the root repository.
 
-To start the KeyManager run:
-`java -cp target/uokms-1.0-SNAPSHOT.jar org.illiam.uokms.KeyManager 1024`
+To rebuild the package run:
+`mvn clean package`
 
+To start the KeyManager run:
+`java -cp target/kms.jar org.illiam.uokms.KeyManager 1024`
+
+To start the Client run:
+`java -cp target/client.jar org.illiam.uokms.Client`
