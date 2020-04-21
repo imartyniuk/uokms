@@ -11,8 +11,8 @@ public class KeyManagementServer {
      * Members that provide server functionality.
      * **/
     private static final int port = 9809;
-    private static final String packetEnd = "<FIN>";
-    ServerSocket serverSocket;
+
+    private ServerSocket serverSocket;
 
     public KeyManagementServer() {}
 
@@ -25,25 +25,7 @@ public class KeyManagementServer {
                 Socket socket = serverSocket.accept();
                 KeyManager.Log(Level.INFO, "New client is connected");
 
-                InputStream is = socket.getInputStream();
-                BufferedReader br = new BufferedReader(new InputStreamReader(is));
-
-                OutputStream os = socket.getOutputStream();
-                PrintWriter pw = new PrintWriter(os, true);
-
-                StringBuilder sb = new StringBuilder();
-                String text;
-                do {
-                    text = br.readLine();
-                    sb.append(text);
-                } while(!text.equals(packetEnd));
-
-                KeyManager.Log(Level.INFO, String.format("Received message:\n%s", sb.toString()));
-
-                pw.println("Received your message but don't really know what to respond");
-                pw.println(packetEnd);
-
-                socket.close();
+                new KeyManagementServerThread(socket).start();
             }
 
         } catch (IOException ex) {

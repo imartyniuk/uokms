@@ -1,10 +1,16 @@
 package org.illiam.uokms;
 
 import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
+import sun.rmi.runtime.Log;
 
 import java.io.*;
+import java.math.BigInteger;
 import java.net.Socket;
+import java.security.spec.DSAParameterSpec;
 import java.util.UUID;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class Client {
@@ -18,9 +24,15 @@ public class Client {
     private static String stsHost = "localhost";
 
     private static final String packetEnd = "<FIN>";
+    private static final String statusOK = "200";
 
     private UUID uuid;
     private Socket kmsSocket;
+
+    /**
+     * Crypto fields.
+     * */
+    private DSAParameterSpec dsaParameterSpec;
 
     public static void main(String[] args) {
         parseArgs(args);
@@ -53,7 +65,9 @@ public class Client {
 
             sendMessage(kmsSocket, this.genGetDomainRequest());
             String msg = receiveMessage(kmsSocket);
-            LOG.info(String.format("Received response: %s", msg));
+
+
+            processResponse(msg);
 
             kmsSocket.close();
 
@@ -83,7 +97,39 @@ public class Client {
             msg.append(text);
         } while(!text.equals(packetEnd));
 
-        return msg.toString();
+        return msg.toString().replace(packetEnd, "");
+    }
+
+    private void processResponse(String response) {
+        try {
+            JSONParser jsonParser = new JSONParser();
+            JSONObject jsonObject = (JSONObject) jsonParser.parse(response);
+
+            String status = (String) jsonObject.get("status");
+            if (!status.equals(statusOK)) {
+                LOG.warning(String.format("Non-success code returned: %s", status));
+                return;
+            }
+
+            String p = (String) jsonObject.get("P");
+            String q = (String) jsonObject.get("Q");
+            String g = (String) jsonObject.get("G");
+
+            BigInteger P = new BigInteger(p);
+            BigInteger Q = new BigInteger(q);
+            BigInteger G = new BigInteger(g);
+
+            dsaParameterSpec = new DSAParameterSpec(P, Q, G);
+
+            LOG.info("Successfully received domain parameters!");
+            LOG.info(String.format("Value of P:\n%s\n", dsaParameterSpec.getP()));
+            LOG.info(String.format("Value of Q:\n%s\n", dsaParameterSpec.getQ()));
+            LOG.info(String.format("Value of G:\n%s\n", dsaParameterSpec.getG()));
+
+        } catch (ParseException ex) {
+            LOG.severe(String.format("Error processing response: %s", ex.getMessage()));
+            ex.printStackTrace();
+        }
     }
 
     private String genGetDomainRequest() {

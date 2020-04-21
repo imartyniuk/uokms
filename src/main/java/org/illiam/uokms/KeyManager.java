@@ -111,7 +111,7 @@ public class KeyManager {
         LOG.info(String.format("Using bit size: %d", bitSize));
     }
 
-    private AlgorithmParameterSpec exposeDomainParameters() {
+    public static AlgorithmParameterSpec GetDomainParameters() {
         return dsaParameterSpec;
     }
 
