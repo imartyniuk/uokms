@@ -1,4 +1,4 @@
-package org.illiam.uokms;
+package main.java.org.illiam.uokms;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -13,8 +13,6 @@ public class KeyManagementServer {
     private static final int port = 9809;
 
     private ServerSocket serverSocket;
-
-    public KeyManagementServer() {}
 
     public void Start() {
         try {

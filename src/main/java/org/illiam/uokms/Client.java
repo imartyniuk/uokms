@@ -1,16 +1,14 @@
-package org.illiam.uokms;
+package main.java.org.illiam.uokms;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
-import sun.rmi.runtime.Log;
 
 import java.io.*;
 import java.math.BigInteger;
 import java.net.Socket;
 import java.security.spec.DSAParameterSpec;
 import java.util.UUID;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class Client {
@@ -23,7 +21,6 @@ public class Client {
     private static String kmsHost = "localhost";
     private static String stsHost = "localhost";
 
-    private static final String packetEnd = "<FIN>";
     private static final String statusOK = "200";
 
     private UUID uuid;
@@ -61,76 +58,63 @@ public class Client {
 
     private void runKms(String kmsHost, int kmsPort) {
         try {
-            kmsSocket = new Socket(kmsHost, kmsPort);
+            communicate(kmsHost, kmsPort, genGetDomainRequest(), processDomainParameters);
+            LOG.info("Domain parameters were retrieved successfully!");
 
-            sendMessage(kmsSocket, this.genGetDomainRequest());
-            String msg = receiveMessage(kmsSocket);
-
-
-            processResponse(msg);
-
-            kmsSocket.close();
-
-        } catch (IOException ex) {
+        } catch (IOException | ParseException ex) {
             LOG.severe(String.format("Error running client: %s", ex.getMessage()));
+            ex.printStackTrace();
             System.exit(1);
         }
     }
 
-    private static void sendMessage(Socket socket, String msg) throws IOException {
-        OutputStream os = socket.getOutputStream();
-        PrintWriter pw = new PrintWriter(os, true);
+    private void communicate(String kmsHost, int kmsPort, String request, IResponseProcessor processor)
+            throws IOException, ParseException {
+        kmsSocket = new Socket(kmsHost, kmsPort);
+        Communicator c = new Communicator();
 
-        System.out.println(msg);
-        pw.println(msg);
-        pw.println(packetEnd);
+        c.SendMessage(kmsSocket, request);
+        String response = c.ReceiveMessage(kmsSocket);
+        processor.ProcessResponse(response);
+
+        kmsSocket.close();
     }
 
-    private static String receiveMessage(Socket socket) throws IOException {
-        InputStream is = socket.getInputStream();
-        BufferedReader br = new BufferedReader(new InputStreamReader(is));
+    private JSONObject getJson(String response) throws ParseException {
+        JSONParser jsonParser = new JSONParser();
+        JSONObject jsonObject = (JSONObject) jsonParser.parse(response);
 
-        StringBuilder msg = new StringBuilder();
-        String text;
-        do {
-            text = br.readLine();
-            msg.append(text);
-        } while(!text.equals(packetEnd));
-
-        return msg.toString().replace(packetEnd, "");
-    }
-
-    private void processResponse(String response) {
-        try {
-            JSONParser jsonParser = new JSONParser();
-            JSONObject jsonObject = (JSONObject) jsonParser.parse(response);
-
-            String status = (String) jsonObject.get("status");
-            if (!status.equals(statusOK)) {
-                LOG.warning(String.format("Non-success code returned: %s", status));
-                return;
-            }
-
-            String p = (String) jsonObject.get("P");
-            String q = (String) jsonObject.get("Q");
-            String g = (String) jsonObject.get("G");
-
-            BigInteger P = new BigInteger(p);
-            BigInteger Q = new BigInteger(q);
-            BigInteger G = new BigInteger(g);
-
-            dsaParameterSpec = new DSAParameterSpec(P, Q, G);
-
-            LOG.info("Successfully received domain parameters!");
-            LOG.info(String.format("Value of P:\n%s\n", dsaParameterSpec.getP()));
-            LOG.info(String.format("Value of Q:\n%s\n", dsaParameterSpec.getQ()));
-            LOG.info(String.format("Value of G:\n%s\n", dsaParameterSpec.getG()));
-
-        } catch (ParseException ex) {
-            LOG.severe(String.format("Error processing response: %s", ex.getMessage()));
-            ex.printStackTrace();
+        String status = (String) jsonObject.get("status");
+        if (!status.equals(statusOK)) {
+            LOG.warning(String.format("Non-success code returned: %s", status));
+            return null;
         }
+
+        return jsonObject;
     }
+
+    /**
+     * Domain paramaters section.
+     * */
+
+    private IResponseProcessor processDomainParameters = (response) -> {
+        JSONObject jsonObject = getJson(response);
+
+        String p = (String) jsonObject.get("P");
+        String q = (String) jsonObject.get("Q");
+        String g = (String) jsonObject.get("G");
+
+        BigInteger P = new BigInteger(p);
+        BigInteger Q = new BigInteger(q);
+        BigInteger G = new BigInteger(g);
+
+        dsaParameterSpec = new DSAParameterSpec(P, Q, G);
+
+        LOG.info("Successfully received domain parameters!");
+        LOG.info(String.format("Value of P:\n%s\n", dsaParameterSpec.getP()));
+        LOG.info(String.format("Value of Q:\n%s\n", dsaParameterSpec.getQ()));
+        LOG.info(String.format("Value of G:\n%s\n", dsaParameterSpec.getG()));
+    };
 
     private String genGetDomainRequest() {
         JSONObject jsonObject = new JSONObject();

@@ -1,4 +1,4 @@
-package org.illiam.uokms;
+package main.java.org.illiam.uokms;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -11,8 +11,6 @@ import java.util.logging.Level;
 
 public class KeyManagementServerThread extends Thread {
 
-    private static final String packetEnd = "<FIN>";
-
     private Socket socket;
 
     public KeyManagementServerThread(Socket socket) {
@@ -21,41 +19,17 @@ public class KeyManagementServerThread extends Thread {
 
     public void run() {
         try {
+            Communicator c = new Communicator();
 
-            String msg = receiveMessage(socket);
+            String msg = c.ReceiveMessage(socket);
             String response = processRequest(msg);
-            sendMessage(socket, response);
+            c.SendMessage(socket, response);
 
             socket.close();
         } catch (IOException ex) {
             KeyManager.Log(Level.SEVERE, ex.getMessage());
             ex.printStackTrace();
         }
-    }
-
-    private String receiveMessage(Socket socket) throws IOException {
-        InputStream is = socket.getInputStream();
-        BufferedReader br = new BufferedReader(new InputStreamReader(is));
-
-        StringBuilder sb = new StringBuilder();
-        String text;
-        do {
-            text = br.readLine();
-            sb.append(text);
-        } while (!text.equals(packetEnd));
-
-        String msg = sb.toString().replace(packetEnd, "");
-        KeyManager.Log(Level.INFO, String.format("Received message:\n%s", msg));
-
-        return msg;
-    }
-
-    private void sendMessage(Socket socket, String msg) throws IOException {
-        OutputStream os = socket.getOutputStream();
-        PrintWriter pw = new PrintWriter(os, true);
-
-        pw.println(msg);
-        pw.println(packetEnd);
     }
 
     private String processRequest(String request) {

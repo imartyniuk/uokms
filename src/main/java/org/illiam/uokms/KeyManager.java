@@ -1,4 +1,4 @@
-package org.illiam.uokms;
+package main.java.org.illiam.uokms;
 
 import java.math.BigInteger;
 import java.security.*;
@@ -47,7 +47,7 @@ public class KeyManager {
 
     private static void initializeClientStorage() {
         rwLock = new ReentrantReadWriteLock();
-        clients = new HashMap<String, KeyPair>();
+        clients = new HashMap<>();
     }
 
     private static void initializeEnvironment(int bitSize) {
@@ -67,13 +67,7 @@ public class KeyManager {
                 LOG.info("Domain parameters were generated successfully!");
             }
 
-        } catch (InvalidParameterSpecException ex) {
-            LOG.severe(String.format("Error, exiting: %s", ex.getMessage()));
-            System.exit(1);
-        } catch (InvalidParameterException ex) {
-            LOG.severe(String.format("Error, exiting: %s", ex.getMessage()));
-            System.exit(1);
-        } catch (NoSuchAlgorithmException ex) {
+        } catch (InvalidParameterSpecException | NoSuchAlgorithmException | InvalidParameterException ex) {
             LOG.severe(String.format("Error, exiting: %s", ex.getMessage()));
             System.exit(1);
         }
@@ -92,8 +86,8 @@ public class KeyManager {
             System.exit(1);
         }
 
-        for (int i = 0; i < args.length; i++) {
-            if (args[i].equals("test")) {
+        for (String arg : args) {
+            if (arg.equals("test")) {
                 testRun = true;
             }
         }
@@ -102,10 +96,10 @@ public class KeyManager {
             LOG.info("This is a test run of the KMS");
         }
 
-        for (int i = 0; i < args.length; i++) {
+        for (String arg : args) {
             try {
-                bitSize = Integer.parseInt(args[i]);
-            } catch (NumberFormatException ex) { }
+                bitSize = Integer.parseInt(arg);
+            } catch (NumberFormatException ignored) { }
         }
 
         LOG.info(String.format("Using bit size: %d", bitSize));
@@ -138,10 +132,7 @@ public class KeyManager {
 
             return true;
 
-        } catch (NoSuchAlgorithmException ex) {
-            LOG.warning(String.format("Error enrolling a client '%s': %s", name, ex.getMessage()));
-            return false;
-        } catch (InvalidAlgorithmParameterException ex) {
+        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException ex) {
             LOG.warning(String.format("Error enrolling a client '%s': %s", name, ex.getMessage()));
             return false;
         }
