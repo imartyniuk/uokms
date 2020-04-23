@@ -9,6 +9,7 @@ import java.math.BigInteger;
 import java.net.Socket;
 import java.security.spec.DSAParameterSpec;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 public class Client {
@@ -30,6 +31,8 @@ public class Client {
      * Crypto fields.
      * */
     private DSAParameterSpec dsaParameterSpec;
+    private BigInteger dsaPublicKey;
+    private boolean enrollmentStatus;
 
     public static void main(String[] args) {
         parseArgs(args);
@@ -58,14 +61,31 @@ public class Client {
 
     private void runKms(String kmsHost, int kmsPort) {
         try {
-            communicate(kmsHost, kmsPort, genGetDomainRequest(), processDomainParameters);
+            communicate(kmsHost, kmsPort, genGetDomainParametersRequest(), processDomainParameters);
             LOG.info("Domain parameters were retrieved successfully!");
+
+            LOG.info("Sleeping for 3 seconds");
+            TimeUnit.SECONDS.sleep(3);
+
+            communicate(kmsHost, kmsPort, genEnrollClientRequest(), processEnrollClientResponse);
+            LOG.info(String.format("Success enrolling? -> %b", enrollmentStatus));
+
+            if (!enrollmentStatus) {
+                LOG.severe("Enrollment failed. Aborting...");
+                System.exit(1);
+            }
+
+            LOG.info("Sleeping for 3 seconds");
+            TimeUnit.SECONDS.sleep(3);
+
+            communicate(kmsHost, kmsPort, genGetPublicKeyRequest(), processPublicKey);
+            LOG.info("Public key was retrieved successfully!");
 
         } catch (IOException | ParseException ex) {
             LOG.severe(String.format("Error running client: %s", ex.getMessage()));
             ex.printStackTrace();
             System.exit(1);
-        }
+        } catch (InterruptedException ignore) {}
     }
 
     private void communicate(String kmsHost, int kmsPort, String request, IResponseProcessor processor)
@@ -94,7 +114,7 @@ public class Client {
     }
 
     /**
-     * Domain paramaters section.
+     * Domain parameters section.
      * */
 
     private IResponseProcessor processDomainParameters = (response) -> {
@@ -116,11 +136,56 @@ public class Client {
         LOG.info(String.format("Value of G:\n%s\n", dsaParameterSpec.getG()));
     };
 
-    private String genGetDomainRequest() {
+    private String genGetDomainParametersRequest() {
         JSONObject jsonObject = new JSONObject();
 
         jsonObject.put("name", "client-"+this.uuid.toString());
         jsonObject.put("method", "GetDomainParameters");
+
+        return jsonObject.toJSONString();
+    }
+
+    /**
+     * Enroll client section.
+     * */
+
+    private IResponseProcessor processEnrollClientResponse = (response) -> {
+        JSONObject jsonObject = getJson(response);
+
+        enrollmentStatus = (boolean) jsonObject.get("res");
+        String comment = (String) jsonObject.get("comment");
+
+        LOG.info("Successfully received EnrollClient response!");
+        LOG.info(comment);
+    };
+
+    private String genEnrollClientRequest() {
+        JSONObject jsonObject = new JSONObject();
+
+        jsonObject.put("name", "client-"+this.uuid.toString());
+        jsonObject.put("method", "EnrollClient");
+
+        return jsonObject.toJSONString();
+    }
+
+    /**
+     * Public key section.
+     * */
+
+    private IResponseProcessor processPublicKey = (response) -> {
+        JSONObject jsonObject = getJson(response);
+
+        String y = (String) jsonObject.get("Y");
+        dsaPublicKey = new BigInteger(y);
+
+        LOG.info(String.format("Successfully received a public key:\n%s", dsaPublicKey.toString()));
+    };
+
+    private String genGetPublicKeyRequest() {
+        JSONObject jsonObject = new JSONObject();
+
+        jsonObject.put("name", "client-"+this.uuid.toString());
+        jsonObject.put("method", "GetPublicKey");
 
         return jsonObject.toJSONString();
     }

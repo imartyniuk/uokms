@@ -109,8 +109,9 @@ public class KeyManager {
         return dsaParameterSpec;
     }
 
-    private static boolean enrollClient(String name) {
+    public static boolean EnrollClient(String name) {
         try {
+            // We may need to lock dsaParameterSpec here.
             KeyPairGenerator kpg = KeyPairGenerator.getInstance("DSA");
             kpg.initialize(dsaParameterSpec);
 
@@ -148,7 +149,7 @@ public class KeyManager {
         }
     }
 
-    private static PublicKey getClientPublicKey(String name) {
+    public static PublicKey GetClientPublicKey(String name) {
         Lock readerLock = rwLock.readLock();
         try {
             readerLock.lock();
@@ -179,8 +180,8 @@ public class KeyManager {
     private static void test() {
         String dummy = "lalala";
 
-        if (enrollClient(dummy)) {
-            DSAPublicKey publicKey = (DSAPublicKey) getClientPublicKey(dummy);
+        if (EnrollClient(dummy)) {
+            DSAPublicKey publicKey = (DSAPublicKey) GetClientPublicKey(dummy);
             LOG.info(String.format("Successfully retrieved client's '%s' public key: %s",
                     dummy, publicKey.getY().toString()));
         } else {

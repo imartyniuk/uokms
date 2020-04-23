@@ -6,6 +6,8 @@ import org.json.simple.parser.ParseException;
 
 import java.io.*;
 import java.net.Socket;
+import java.security.PublicKey;
+import java.security.interfaces.DSAPublicKey;
 import java.security.spec.DSAParameterSpec;
 import java.util.logging.Level;
 
@@ -68,8 +70,24 @@ public class KeyManagementServerThread extends Thread {
                 jsonObject.put("status", "200");
                 break;
 
+            case "EnrollClient":
+                boolean res = KeyManager.EnrollClient(name);
+                String comment = res ? String.format("Client '%s' was enrolled successfully", name) :
+                        String.format("Failed to enroll client '%s'", name);
+
+                jsonObject.put("res", res);
+                jsonObject.put("comment", comment);
+                jsonObject.put("status", "200");
+                break;
+
+            case "GetPublicKey":
+                DSAPublicKey pubkey = (DSAPublicKey) KeyManager.GetClientPublicKey(name);
+                jsonObject.put("Y", pubkey.getY().toString());
+                jsonObject.put("status", "200");
+                break;
+
             default:
-                jsonObject.put("resp", "bad request method");
+                jsonObject.put("resp", "Invalid request method");
                 jsonObject.put("status", "404");
                 break;
         }
