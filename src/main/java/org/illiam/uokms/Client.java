@@ -4,11 +4,21 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.math.BigInteger;
 import java.net.Socket;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.spec.DSAParameterSpec;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -16,14 +26,27 @@ public class Client {
 
     private static Logger LOG = Logger.getLogger(Client.class.getName());
 
+    /**
+     * Communication constants.
+     */
     private static int kmsPort = 9809;
     private static int stsPort = 9708;
-
     private static String kmsHost = "localhost";
     private static String stsHost = "localhost";
 
     private static final String statusOK = "200";
 
+    /**
+     * Crypto constants.
+     * */
+    private static final int SHA_KEY_LENGTH = 16;
+    private static final String SYMMETRIC_ENCRYPTION_DETAILS = "AES/CBC/PKCS5Padding";
+    private static final String SYMMETRIC_ENCRYPTION_ALGO = "AES";
+    private static final String HASH_ALGO = "SHA-1";
+
+    /**
+     * Client identification and communication fields.
+     * */
     private UUID uuid;
     private Socket kmsSocket;
 
@@ -34,18 +57,25 @@ public class Client {
     private BigInteger dsaPublicKey;
     private boolean enrollmentStatus;
 
+    private HashMap<UUID, BigInteger> encryptionKeys;
+    private HashMap<UUID, IvParameterSpec> ivParameterSpecs;
+
     public static void main(String[] args) {
         parseArgs(args);
 
         Client client = new Client();
         client.runKms(kmsHost, kmsPort);
+
+        String msg = "is there anybody out here?";
+        client.storeMessage(msg);
     }
 
     private Client() {
         uuid = UUID.randomUUID();
+        encryptionKeys = new HashMap<>();
+        ivParameterSpecs = new HashMap<>();
         LOG.info(String.format("Created a client with an id: %s", uuid.toString()));
     }
-
 
     private static void parseArgs(String[] args) {
         if (args.length > 0) {
@@ -188,5 +218,110 @@ public class Client {
         jsonObject.put("method", "GetPublicKey");
 
         return jsonObject.toJSONString();
+    }
+
+    private void storeMessage(String msg) {
+        UUID messageId = UUID.randomUUID();
+        BigInteger r = genEncryptionKey();
+
+        if (r.min(dsaParameterSpec.getQ()).equals(r)) {
+            LOG.info(String.format("Encryption key for a message was created successfully:\n%s", r.toString()));
+        } else {
+            LOG.warning("Error generating a key!");
+            return;
+        }
+
+        // encryptionKeys.put(messageId, r);
+        IvParameterSpec ivParameterSpec = genInitializationVector();
+        ivParameterSpecs.put(messageId, ivParameterSpec);
+
+        BigInteger w = dsaParameterSpec.getG().modPow(r, dsaParameterSpec.getP());
+        String encryptedMessage = encryptMessage(msg, r, ivParameterSpec);
+
+        LOG.info(String.format("The message was encrypted successfully:\n%s", encryptedMessage));
+        LOG.info(String.format("Encryption key:\n%s", w));
+
+        String decryptedMessage = decryptMessage(encryptedMessage, r, ivParameterSpec);
+        LOG.info("The message was decrypted successfully!");
+        LOG.info(String.format("Decrypted message:\n%s", decryptedMessage));
+        if (!decryptedMessage.equals(msg)) {
+            LOG.warning(String.format(
+                    "Received different decrypted message. Expected: '%s', got '%s'.", msg, decryptedMessage));
+        } else {
+            LOG.fine("The decryption was correct!");
+        }
+    }
+
+    private String encryptMessage(String msg, BigInteger encryptionKey, IvParameterSpec ivParameterSpec) {
+        String encryptedMessage = null;
+
+        try {
+            BigInteger encKey = dsaPublicKey.modPow(encryptionKey, dsaParameterSpec.getP());
+            SecretKeySpec secretKeySpec = prepareSecretKey(encKey);
+
+            Cipher cipher = Cipher.getInstance(SYMMETRIC_ENCRYPTION_DETAILS);
+            cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, ivParameterSpec);
+            encryptedMessage = Base64.getEncoder().encodeToString(cipher.doFinal(msg.getBytes("UTF-8")));
+
+        } catch (BadPaddingException |
+                IllegalBlockSizeException |
+                InvalidAlgorithmParameterException |
+                InvalidKeyException |
+                NoSuchAlgorithmException |
+                NoSuchPaddingException |
+                UnsupportedEncodingException ex) {
+            LOG.severe(String.format("Error encrypting a message: %s", ex.getMessage()));
+            System.exit(1);
+        }
+
+        return encryptedMessage;
+    }
+
+    private String decryptMessage(String encryptedMessage, BigInteger encryptionKey, IvParameterSpec ivParameterSpec) {
+        String decryptedMessage = null;
+
+        try {
+            BigInteger encKey = dsaPublicKey.modPow(encryptionKey, dsaParameterSpec.getP());
+            SecretKeySpec secretKeySpec = prepareSecretKey(encKey);
+
+            Cipher cipher = Cipher.getInstance(SYMMETRIC_ENCRYPTION_DETAILS);
+            cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec);
+            decryptedMessage = new String(cipher.doFinal(Base64.getDecoder().decode(encryptedMessage)));
+
+        } catch (BadPaddingException |
+                IllegalBlockSizeException |
+                InvalidAlgorithmParameterException |
+                InvalidKeyException |
+                NoSuchAlgorithmException |
+                NoSuchPaddingException ex) {
+            LOG.severe(String.format("Error decrypting a message: %s", ex.getMessage()));
+            System.exit(1);
+        }
+
+        return decryptedMessage;
+    }
+
+    private SecretKeySpec prepareSecretKey(BigInteger encKey) throws NoSuchAlgorithmException {
+        byte[] key = encKey.toByteArray();
+        MessageDigest sha = MessageDigest.getInstance(HASH_ALGO);
+
+        key = sha.digest(key);
+        key = Arrays.copyOf(key, SHA_KEY_LENGTH);
+        return new SecretKeySpec(key, SYMMETRIC_ENCRYPTION_ALGO);
+    }
+
+    private BigInteger genEncryptionKey() {
+        int qBitSize = dsaParameterSpec.getQ().bitCount();
+        Random rnd = new Random();
+        int bitSize = rnd.nextInt(qBitSize);
+
+        return BigInteger.probablePrime(bitSize, new Random());
+    }
+
+    private IvParameterSpec genInitializationVector() {
+        byte[] iv = new byte[16];
+        Random rnd = new Random();
+        rnd.nextBytes(iv);
+        return new IvParameterSpec(iv);
     }
 }
