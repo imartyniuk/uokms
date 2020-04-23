@@ -7,7 +7,7 @@ public class Communicator {
 
     private static final String packetEnd = "<FIN>";
 
-    public void SendMessage(Socket socket, String msg) throws IOException {
+    public static void SendMessage(Socket socket, String msg) throws IOException {
         OutputStream os = socket.getOutputStream();
         PrintWriter pw = new PrintWriter(os, true);
 
@@ -15,7 +15,7 @@ public class Communicator {
         pw.println(packetEnd);
     }
 
-    public String ReceiveMessage(Socket socket) throws IOException {
+    public static String ReceiveMessage(Socket socket) throws IOException {
         InputStream is = socket.getInputStream();
         BufferedReader br = new BufferedReader(new InputStreamReader(is));
 

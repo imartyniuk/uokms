@@ -6,7 +6,6 @@ import org.json.simple.parser.ParseException;
 
 import java.io.*;
 import java.net.Socket;
-import java.security.PublicKey;
 import java.security.interfaces.DSAPublicKey;
 import java.security.spec.DSAParameterSpec;
 import java.util.logging.Level;

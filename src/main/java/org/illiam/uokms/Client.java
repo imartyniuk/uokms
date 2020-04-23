@@ -1,7 +1,6 @@
 package main.java.org.illiam.uokms;
 
 import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
 import javax.crypto.BadPaddingException;
@@ -34,8 +33,6 @@ public class Client {
     private static String kmsHost = "localhost";
     private static String stsHost = "localhost";
 
-    private static final String statusOK = "200";
-
     /**
      * Crypto constants.
      * */
@@ -66,7 +63,9 @@ public class Client {
         Client client = new Client();
         client.runKms(kmsHost, kmsPort);
 
+
         String msg = "is there anybody out here?";
+        client.runSts(stsHost, stsPort);
         client.storeMessage(msg);
     }
 
@@ -118,29 +117,25 @@ public class Client {
         } catch (InterruptedException ignore) {}
     }
 
+    private void runSts(String stsHost, int stsPort) {
+        try {
+            communicate(stsHost, stsPort, genStorageDummyRequest(), processStorageDummy);
+        } catch (IOException | ParseException ex) {
+            LOG.severe(String.format("Error running client: %s", ex.getMessage()));
+            ex.printStackTrace();
+            System.exit(1);
+        }
+    }
+
     private void communicate(String kmsHost, int kmsPort, String request, IResponseProcessor processor)
             throws IOException, ParseException {
         kmsSocket = new Socket(kmsHost, kmsPort);
-        Communicator c = new Communicator();
 
-        c.SendMessage(kmsSocket, request);
-        String response = c.ReceiveMessage(kmsSocket);
+        Communicator.SendMessage(kmsSocket, request);
+        String response = Communicator.ReceiveMessage(kmsSocket);
         processor.ProcessResponse(response);
 
         kmsSocket.close();
-    }
-
-    private JSONObject getJson(String response) throws ParseException {
-        JSONParser jsonParser = new JSONParser();
-        JSONObject jsonObject = (JSONObject) jsonParser.parse(response);
-
-        String status = (String) jsonObject.get("status");
-        if (!status.equals(statusOK)) {
-            LOG.warning(String.format("Non-success code returned: %s", status));
-            return null;
-        }
-
-        return jsonObject;
     }
 
     /**
@@ -148,7 +143,7 @@ public class Client {
      * */
 
     private IResponseProcessor processDomainParameters = (response) -> {
-        JSONObject jsonObject = getJson(response);
+        JSONObject jsonObject = JsonParser.getJson(response);
 
         String p = (String) jsonObject.get("P");
         String q = (String) jsonObject.get("Q");
@@ -180,7 +175,7 @@ public class Client {
      * */
 
     private IResponseProcessor processEnrollClientResponse = (response) -> {
-        JSONObject jsonObject = getJson(response);
+        JSONObject jsonObject = JsonParser.getJson(response);
 
         enrollmentStatus = (boolean) jsonObject.get("res");
         String comment = (String) jsonObject.get("comment");
@@ -203,7 +198,7 @@ public class Client {
      * */
 
     private IResponseProcessor processPublicKey = (response) -> {
-        JSONObject jsonObject = getJson(response);
+        JSONObject jsonObject = JsonParser.getJson(response);
 
         String y = (String) jsonObject.get("Y");
         dsaPublicKey = new BigInteger(y);
@@ -219,6 +214,28 @@ public class Client {
 
         return jsonObject.toJSONString();
     }
+
+    /**
+     * Dummy storage handshake.
+     * */
+
+    private IResponseProcessor processStorageDummy = (response) -> {
+        JSONObject jsonObject = JsonParser.getJson(response);
+
+        String y = (String) jsonObject.get("message");
+
+        LOG.info(String.format("Successfully received a response from storage: '%s'", y));
+    };
+
+    private String genStorageDummyRequest() {
+        JSONObject jsonObject = new JSONObject();
+
+        jsonObject.put("name", "client-"+this.uuid.toString());
+        jsonObject.put("method", "is there anybody out there?");
+
+        return jsonObject.toJSONString();
+    }
+
 
     private void storeMessage(String msg) {
         UUID messageId = UUID.randomUUID();
@@ -248,7 +265,7 @@ public class Client {
             LOG.warning(String.format(
                     "Received different decrypted message. Expected: '%s', got '%s'.", msg, decryptedMessage));
         } else {
-            LOG.fine("The decryption was correct!");
+            LOG.info("The decryption was correct!");
         }
     }
 

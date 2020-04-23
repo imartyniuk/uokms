@@ -106,14 +106,21 @@ public class KeyManager {
     }
 
     public static AlgorithmParameterSpec GetDomainParameters() {
-        return dsaParameterSpec;
+        Lock readLock = rwLock.readLock();
+        try {
+            readLock.lock();
+            return dsaParameterSpec;
+        } finally {
+            readLock.unlock();
+        }
     }
 
     public static boolean EnrollClient(String name) {
         try {
-            // We may need to lock dsaParameterSpec here.
+            DSAParameterSpec dsaParamSpec = (DSAParameterSpec) GetDomainParameters();
+
             KeyPairGenerator kpg = KeyPairGenerator.getInstance("DSA");
-            kpg.initialize(dsaParameterSpec);
+            kpg.initialize(dsaParamSpec);
 
             KeyPair kp = kpg.generateKeyPair();
             DSAPublicKey publicKey = (DSAPublicKey) kp.getPublic();
@@ -122,7 +129,7 @@ public class KeyManager {
             LOG.info(String.format("Successfully created the key pair for the client '%s'.", name));
 
             LOG.info("Checking the correctness of the generated values...");
-            if (!dsaParameterSpec.getG().modPow(privateKey.getX(), dsaParameterSpec.getP()).equals(publicKey.getY())) {
+            if (!dsaParamSpec.getG().modPow(privateKey.getX(), dsaParamSpec.getP()).equals(publicKey.getY())) {
                 LOG.warning("Something's wrong with generated keys. Aborting...");
                 return false;
             }
