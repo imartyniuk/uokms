@@ -45,7 +45,7 @@ public class Client {
      * Client identification and communication fields.
      * */
     private UUID uuid;
-    private Socket kmsSocket;
+    //private Socket kmsSocket;
 
     /**
      * Crypto fields.
@@ -57,16 +57,17 @@ public class Client {
     private HashMap<UUID, BigInteger> encryptionKeys;
     private HashMap<UUID, IvParameterSpec> ivParameterSpecs;
 
+    private String MSG = "is there anybody out here?";
+
     public static void main(String[] args) {
         parseArgs(args);
 
         Client client = new Client();
         client.runKms(kmsHost, kmsPort);
 
-
-        String msg = "is there anybody out here?";
-        client.runSts(stsHost, stsPort);
-        client.storeMessage(msg);
+        client.storeMessage(client.MSG);
+        UUID objId = (UUID) client.ivParameterSpecs.keySet().toArray()[0];
+        client.getMessage(objId.toString());
     }
 
     private Client() {
@@ -93,9 +94,6 @@ public class Client {
             communicate(kmsHost, kmsPort, genGetDomainParametersRequest(), processDomainParameters);
             LOG.info("Domain parameters were retrieved successfully!");
 
-            LOG.info("Sleeping for 3 seconds");
-            TimeUnit.SECONDS.sleep(3);
-
             communicate(kmsHost, kmsPort, genEnrollClientRequest(), processEnrollClientResponse);
             LOG.info(String.format("Success enrolling? -> %b", enrollmentStatus));
 
@@ -104,9 +102,6 @@ public class Client {
                 System.exit(1);
             }
 
-            LOG.info("Sleeping for 3 seconds");
-            TimeUnit.SECONDS.sleep(3);
-
             communicate(kmsHost, kmsPort, genGetPublicKeyRequest(), processPublicKey);
             LOG.info("Public key was retrieved successfully!");
 
@@ -114,28 +109,47 @@ public class Client {
             LOG.severe(String.format("Error running client: %s", ex.getMessage()));
             ex.printStackTrace();
             System.exit(1);
-        } catch (InterruptedException ignore) {}
-    }
-
-    private void runSts(String stsHost, int stsPort) {
-        try {
-            communicate(stsHost, stsPort, genStorageDummyRequest(), processStorageDummy);
-        } catch (IOException | ParseException ex) {
-            LOG.severe(String.format("Error running client: %s", ex.getMessage()));
-            ex.printStackTrace();
-            System.exit(1);
         }
     }
 
-    private void communicate(String kmsHost, int kmsPort, String request, IResponseProcessor processor)
-            throws IOException, ParseException {
-        kmsSocket = new Socket(kmsHost, kmsPort);
+    private void storeMessage(String msg) {
+        try {
+            LOG.info(String.format("Storing message: '%s'", msg));
+            communicate(stsHost, stsPort, genWriteStorageEntryRequest(msg), processWriteStorageEntryResponse);
 
-        Communicator.SendMessage(kmsSocket, request);
-        String response = Communicator.ReceiveMessage(kmsSocket);
+            LOG.info("Sleeping for 3 seconds");
+            TimeUnit.SECONDS.sleep(3);
+
+        } catch (IOException | ParseException | InvalidKeyException ex) {
+            LOG.severe(String.format("Error storing a message: %s", ex.getMessage()));
+            ex.printStackTrace();
+            System.exit(1);
+        } catch (InterruptedException ignore) {}
+    }
+
+    private void getMessage(String objId) {
+        try {
+            LOG.info(String.format("Getting message: '%s'", objId));
+            communicate(stsHost, stsPort, genReadStorageEntryRequest(objId), processReadStorageEntryResponse);
+
+            LOG.info("Sleeping for 3 seconds");
+            TimeUnit.SECONDS.sleep(3);
+
+        } catch (IOException | ParseException ex) {
+            LOG.severe(String.format("Error storing a message: %s", ex.getMessage()));
+            System.exit(1);
+        } catch (InterruptedException ignore) {}
+    }
+
+    private void communicate(String host, int port, String request, IResponseProcessor processor)
+            throws IOException, ParseException {
+        Socket socket = new Socket(host, port);
+
+        Communicator.SendMessage(socket, request);
+        String response = Communicator.ReceiveMessage(socket);
         processor.ProcessResponse(response);
 
-        kmsSocket.close();
+        socket.close();
     }
 
     /**
@@ -216,57 +230,78 @@ public class Client {
     }
 
     /**
-     * Dummy storage handshake.
+     * Storing entries section.
      * */
 
-    private IResponseProcessor processStorageDummy = (response) -> {
+    private IResponseProcessor processReadStorageEntryResponse = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        String y = (String) jsonObject.get("message");
+        String objId = (String) jsonObject.get("objId");
+        String w = (String) jsonObject.get("W");
+        String encryptedMessage = (String) jsonObject.get("encMessage");
 
-        LOG.info(String.format("Successfully received a response from storage: '%s'", y));
+        LOG.info("Successfully received a response from storage!");
+        LOG.info(String.format("Object ID:\n%s", objId));
+        LOG.info(String.format("W:\n%s", w));
+        LOG.info(String.format("Encrypted message:\n%s", encryptedMessage));
     };
 
-    private String genStorageDummyRequest() {
+    private String genReadStorageEntryRequest(String objId) {
         JSONObject jsonObject = new JSONObject();
 
         jsonObject.put("name", "client-"+this.uuid.toString());
-        jsonObject.put("method", "is there anybody out there?");
-
+        jsonObject.put("method", "ReadStorageEntry");
+        jsonObject.put("objId", objId);
         return jsonObject.toJSONString();
     }
 
+    private IResponseProcessor processWriteStorageEntryResponse = (response) -> {
+        JSONObject jsonObject = JsonParser.getJson(response);
 
-    private void storeMessage(String msg) {
+        String msg = (String) jsonObject.get("comment");
+
+        LOG.info(String.format("Successfully received a response from storage: '%s'", msg));
+    };
+
+    private String genWriteStorageEntryRequest(String msg) throws InvalidKeyException {
         UUID messageId = UUID.randomUUID();
         BigInteger r = genEncryptionKey();
 
         if (r.min(dsaParameterSpec.getQ()).equals(r)) {
-            LOG.info(String.format("Encryption key for a message was created successfully:\n%s", r.toString()));
+            LOG.info("Encryption key for a message was created successfully!");
         } else {
-            LOG.warning("Error generating a key!");
-            return;
+            LOG.severe(String.format("Error generating a key:\n%s", r.toString()));
+            throw new InvalidKeyException();
         }
 
-        // encryptionKeys.put(messageId, r);
         IvParameterSpec ivParameterSpec = genInitializationVector();
         ivParameterSpecs.put(messageId, ivParameterSpec);
 
         BigInteger w = dsaParameterSpec.getG().modPow(r, dsaParameterSpec.getP());
+        LOG.info(String.format("Encryption parameter:\n%s", w));
+
         String encryptedMessage = encryptMessage(msg, r, ivParameterSpec);
-
         LOG.info(String.format("The message was encrypted successfully:\n%s", encryptedMessage));
-        LOG.info(String.format("Encryption key:\n%s", w));
 
-        String decryptedMessage = decryptMessage(encryptedMessage, r, ivParameterSpec);
+        /*String decryptedMessage = decryptMessage(encryptedMessage, r, ivParameterSpec);
         LOG.info("The message was decrypted successfully!");
         LOG.info(String.format("Decrypted message:\n%s", decryptedMessage));
         if (!decryptedMessage.equals(msg)) {
             LOG.warning(String.format(
-                    "Received different decrypted message. Expected: '%s', got '%s'.", msg, decryptedMessage));
+                "Received different decrypted message. Expected: '%s', got '%s'.", msg, decryptedMessage));
         } else {
             LOG.info("The decryption was correct!");
-        }
+        }*/
+
+        JSONObject jsonObject = new JSONObject();
+
+        jsonObject.put("name", "client-"+this.uuid.toString());
+        jsonObject.put("method", "WriteStorageEntry");
+        jsonObject.put("objId", messageId.toString());
+        jsonObject.put("W", w.toString());
+        jsonObject.put("encMessage", encryptedMessage);
+
+        return jsonObject.toJSONString();
     }
 
     private String encryptMessage(String msg, BigInteger encryptionKey, IvParameterSpec ivParameterSpec) {
@@ -331,6 +366,7 @@ public class Client {
         int qBitSize = dsaParameterSpec.getQ().bitCount();
         Random rnd = new Random();
         int bitSize = rnd.nextInt(qBitSize);
+        while(bitSize < qBitSize / 2) { bitSize = rnd.nextInt(qBitSize); }
 
         return BigInteger.probablePrime(bitSize, new Random());
     }

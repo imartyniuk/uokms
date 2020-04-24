@@ -6,8 +6,11 @@ import org.json.simple.parser.ParseException;
 
 import java.math.BigInteger;
 import java.security.spec.DSAParameterSpec;
+import java.util.HashMap;
 import java.util.UUID;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -19,9 +22,46 @@ public class Storage {
     private static ReadWriteLock rwLock;
     private static DSAParameterSpec dsaParameterSpec;
 
+    private static HashMap<String, ClientInformation> clientData;
+
     public static void main(String[] args) {
+        initializeStorage();
+
         StorageServer storageServer = new StorageServer();
         storageServer.Start();
+    }
+
+    private static void initializeStorage() {
+        rwLock = new ReentrantReadWriteLock();
+        clientData = new HashMap<>();
+    }
+
+    public static void WriteStorageEntry(String client, String objId, String w, String encryptedMessage) {
+        Lock writeLock = rwLock.writeLock();
+        try {
+            writeLock.lock();
+            if (!clientData.containsKey(client)) {
+                clientData.put(client, new ClientInformation());
+            }
+            clientData.get(client).AddEntry(objId, w, encryptedMessage);
+
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public static ClientInformation.ClientEntry ReadStorageEntry(String client, String objId) {
+        Lock readLock = rwLock.readLock();
+        try {
+            readLock.lock();
+            if (!clientData.containsKey(client)) {
+                return null;
+            }
+            return clientData.get(client).GetEntry(objId);
+
+        } finally {
+            readLock.unlock();
+        }
     }
 
     public static IResponseProcessor processDomainParameters = (response) -> {
