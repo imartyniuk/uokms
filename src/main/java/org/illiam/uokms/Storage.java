@@ -81,6 +81,8 @@ public class Storage {
         LOG.info(String.format("Value of P:\n%s\n", dsaParameterSpec.getP()));
         LOG.info(String.format("Value of Q:\n%s\n", dsaParameterSpec.getQ()));
         LOG.info(String.format("Value of G:\n%s\n", dsaParameterSpec.getG()));
+
+        return dsaParameterSpec;
     };
 
     public static String genGetDomainParametersRequest() {

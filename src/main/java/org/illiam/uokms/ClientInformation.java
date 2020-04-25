@@ -1,7 +1,6 @@
 package main.java.org.illiam.uokms;
 
 import java.util.HashMap;
-import java.util.logging.Level;
 
 public class ClientInformation {
 

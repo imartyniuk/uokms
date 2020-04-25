@@ -67,7 +67,11 @@ public class Client {
 
         client.storeMessage(client.MSG);
         UUID objId = (UUID) client.ivParameterSpecs.keySet().toArray()[0];
-        client.getMessage(objId.toString());
+
+        ClientInformation.ClientEntry entry = client.getMessage(objId.toString());
+
+        BigInteger encKey = client.retrieveKey(entry);
+        client.decryptWithKey(entry.encryptedMessage, encKey, client.ivParameterSpecs.get(objId));
     }
 
     private Client() {
@@ -91,10 +95,12 @@ public class Client {
 
     private void runKms(String kmsHost, int kmsPort) {
         try {
-            communicate(kmsHost, kmsPort, genGetDomainParametersRequest(), processDomainParameters);
+            dsaParameterSpec = (DSAParameterSpec) communicate(
+                    kmsHost, kmsPort, genGetDomainParametersRequest(), processDomainParameters);
             LOG.info("Domain parameters were retrieved successfully!");
 
-            communicate(kmsHost, kmsPort, genEnrollClientRequest(), processEnrollClientResponse);
+            enrollmentStatus = (boolean) communicate(
+                    kmsHost, kmsPort, genEnrollClientRequest(), processEnrollClientResponse);
             LOG.info(String.format("Success enrolling? -> %b", enrollmentStatus));
 
             if (!enrollmentStatus) {
@@ -102,7 +108,7 @@ public class Client {
                 System.exit(1);
             }
 
-            communicate(kmsHost, kmsPort, genGetPublicKeyRequest(), processPublicKey);
+            dsaPublicKey = (BigInteger) communicate(kmsHost, kmsPort, genGetPublicKeyRequest(), processPublicKey);
             LOG.info("Public key was retrieved successfully!");
 
         } catch (IOException | ParseException ex) {
@@ -110,6 +116,31 @@ public class Client {
             ex.printStackTrace();
             System.exit(1);
         }
+    }
+
+    private BigInteger retrieveKey(ClientInformation.ClientEntry entry) {
+        BigInteger key = null;
+
+        try {
+            BigInteger rr = genEncryptionKey();
+            BigInteger U = new BigInteger(entry.w).modPow(rr, dsaParameterSpec.getP());
+
+            BigInteger V = (BigInteger) communicate(kmsHost, kmsPort, genRetrieveKeyRequest(U), processRetrieveKey);
+            LOG.info("The key was retrieved successfully!");
+
+            BigInteger rrInverse = rr.modInverse(dsaParameterSpec.getQ());
+            key = V.modPow(rrInverse, dsaParameterSpec.getP());
+
+            LOG.info("Sleeping for 3 seconds");
+            TimeUnit.SECONDS.sleep(3);
+
+        } catch (IOException | ParseException ex) {
+            LOG.severe(String.format("Error running client: %s", ex.getMessage()));
+            ex.printStackTrace();
+            System.exit(1);
+        } catch (InterruptedException ignore) {}
+
+        return key;
     }
 
     private void storeMessage(String msg) {
@@ -127,10 +158,13 @@ public class Client {
         } catch (InterruptedException ignore) {}
     }
 
-    private void getMessage(String objId) {
+    private ClientInformation.ClientEntry getMessage(String objId) {
+        ClientInformation.ClientEntry entry = null;
+
         try {
             LOG.info(String.format("Getting message: '%s'", objId));
-            communicate(stsHost, stsPort, genReadStorageEntryRequest(objId), processReadStorageEntryResponse);
+            entry = (ClientInformation.ClientEntry) communicate(
+                            stsHost, stsPort, genReadStorageEntryRequest(objId), processReadStorageEntryResponse);
 
             LOG.info("Sleeping for 3 seconds");
             TimeUnit.SECONDS.sleep(3);
@@ -139,17 +173,20 @@ public class Client {
             LOG.severe(String.format("Error storing a message: %s", ex.getMessage()));
             System.exit(1);
         } catch (InterruptedException ignore) {}
+
+        return entry;
     }
 
-    private void communicate(String host, int port, String request, IResponseProcessor processor)
+    private Object communicate(String host, int port, String request, IResponseProcessor processor)
             throws IOException, ParseException {
         Socket socket = new Socket(host, port);
 
         Communicator.SendMessage(socket, request);
         String response = Communicator.ReceiveMessage(socket);
-        processor.ProcessResponse(response);
 
         socket.close();
+
+        return processor.ProcessResponse(response);
     }
 
     /**
@@ -167,12 +204,12 @@ public class Client {
         BigInteger Q = new BigInteger(q);
         BigInteger G = new BigInteger(g);
 
-        dsaParameterSpec = new DSAParameterSpec(P, Q, G);
-
         LOG.info("Successfully received domain parameters!");
-        LOG.info(String.format("Value of P:\n%s\n", dsaParameterSpec.getP()));
-        LOG.info(String.format("Value of Q:\n%s\n", dsaParameterSpec.getQ()));
-        LOG.info(String.format("Value of G:\n%s\n", dsaParameterSpec.getG()));
+        LOG.info(String.format("Value of P:\n%s\n", P.toString()));
+        LOG.info(String.format("Value of Q:\n%s\n", Q.toString()));
+        LOG.info(String.format("Value of G:\n%s\n", G.toString()));
+
+        return new DSAParameterSpec(P, Q, G);
     };
 
     private String genGetDomainParametersRequest() {
@@ -191,11 +228,11 @@ public class Client {
     private IResponseProcessor processEnrollClientResponse = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        enrollmentStatus = (boolean) jsonObject.get("res");
         String comment = (String) jsonObject.get("comment");
-
         LOG.info("Successfully received EnrollClient response!");
         LOG.info(comment);
+
+        return (boolean) jsonObject.get("res");
     };
 
     private String genEnrollClientRequest() {
@@ -215,9 +252,9 @@ public class Client {
         JSONObject jsonObject = JsonParser.getJson(response);
 
         String y = (String) jsonObject.get("Y");
-        dsaPublicKey = new BigInteger(y);
+        LOG.info(String.format("Successfully received a public key:\n%s", y));
 
-        LOG.info(String.format("Successfully received a public key:\n%s", dsaPublicKey.toString()));
+        return new BigInteger(y);
     };
 
     private String genGetPublicKeyRequest() {
@@ -225,6 +262,29 @@ public class Client {
 
         jsonObject.put("name", "client-"+this.uuid.toString());
         jsonObject.put("method", "GetPublicKey");
+
+        return jsonObject.toJSONString();
+    }
+
+    /**
+     * Key retrieval section.
+     * */
+
+    private IResponseProcessor processRetrieveKey = (response) -> {
+        JSONObject jsonObject = JsonParser.getJson(response);
+
+        String v = (String) jsonObject.get("V");
+        LOG.info(String.format("Successfully retrieved a key:\n%s", v));
+
+        return new BigInteger(v);
+    };
+
+    private String genRetrieveKeyRequest(BigInteger U) {
+        JSONObject jsonObject = new JSONObject();
+
+        jsonObject.put("name", "client-"+this.uuid.toString());
+        jsonObject.put("method", "RetrieveKey");
+        jsonObject.put("U", U.toString());
 
         return jsonObject.toJSONString();
     }
@@ -244,6 +304,8 @@ public class Client {
         LOG.info(String.format("Object ID:\n%s", objId));
         LOG.info(String.format("W:\n%s", w));
         LOG.info(String.format("Encrypted message:\n%s", encryptedMessage));
+
+        return new ClientInformation().new ClientEntry(objId, w, encryptedMessage);
     };
 
     private String genReadStorageEntryRequest(String objId) {
@@ -259,8 +321,8 @@ public class Client {
         JSONObject jsonObject = JsonParser.getJson(response);
 
         String msg = (String) jsonObject.get("comment");
-
         LOG.info(String.format("Successfully received a response from storage: '%s'", msg));
+        return msg;
     };
 
     private String genWriteStorageEntryRequest(String msg) throws InvalidKeyException {
@@ -282,16 +344,6 @@ public class Client {
 
         String encryptedMessage = encryptMessage(msg, r, ivParameterSpec);
         LOG.info(String.format("The message was encrypted successfully:\n%s", encryptedMessage));
-
-        /*String decryptedMessage = decryptMessage(encryptedMessage, r, ivParameterSpec);
-        LOG.info("The message was decrypted successfully!");
-        LOG.info(String.format("Decrypted message:\n%s", decryptedMessage));
-        if (!decryptedMessage.equals(msg)) {
-            LOG.warning(String.format(
-                "Received different decrypted message. Expected: '%s', got '%s'.", msg, decryptedMessage));
-        } else {
-            LOG.info("The decryption was correct!");
-        }*/
 
         JSONObject jsonObject = new JSONObject();
 
@@ -329,11 +381,22 @@ public class Client {
         return encryptedMessage;
     }
 
-    private String decryptMessage(String encryptedMessage, BigInteger encryptionKey, IvParameterSpec ivParameterSpec) {
+    private void decryptWithKey(String encryptedMessage, BigInteger encKey, IvParameterSpec ivParameterSpec) {
+        String decryptedMessage = decryptMessage(encryptedMessage, encKey, ivParameterSpec);
+        LOG.info("The message was decrypted successfully!");
+        LOG.info(String.format("Decrypted message:\n%s", decryptedMessage));
+        if (!decryptedMessage.equals(MSG)) {
+            LOG.warning(String.format(
+                    "Received different decrypted message. Expected: '%s', got '%s'.", MSG, decryptedMessage));
+        } else {
+            LOG.info("The decryption was correct!");
+        }
+    }
+
+    private String decryptMessage(String encryptedMessage, BigInteger encKey, IvParameterSpec ivParameterSpec) {
         String decryptedMessage = null;
 
         try {
-            BigInteger encKey = dsaPublicKey.modPow(encryptionKey, dsaParameterSpec.getP());
             SecretKeySpec secretKeySpec = prepareSecretKey(encKey);
 
             Cipher cipher = Cipher.getInstance(SYMMETRIC_ENCRYPTION_DETAILS);

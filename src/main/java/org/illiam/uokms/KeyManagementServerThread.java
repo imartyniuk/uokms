@@ -5,7 +5,9 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
 import java.io.*;
+import java.math.BigInteger;
 import java.net.Socket;
+import java.security.Key;
 import java.security.interfaces.DSAPublicKey;
 import java.security.spec.DSAParameterSpec;
 import java.util.logging.Level;
@@ -40,13 +42,7 @@ public class KeyManagementServerThread extends Thread {
             JSONParser jsonParser = new JSONParser();
             JSONObject jsonObject = (JSONObject) jsonParser.parse(request);
 
-            String name = (String) jsonObject.get("name");
-            String method = (String) jsonObject.get("method");
-
-            KeyManager.Log(Level.INFO, String.format("Received request from %s", name));
-            KeyManager.Log(Level.INFO, String.format("Requested method: %s", method));
-
-            response = executeRequest(name, method);
+            response = executeRequest(jsonObject);
 
         } catch (ParseException ex) {
             KeyManager.Log(Level.SEVERE, ex.getMessage());
@@ -56,7 +52,13 @@ public class KeyManagementServerThread extends Thread {
         return response;
     }
 
-    private String executeRequest(String name, String method) {
+    private String executeRequest(JSONObject request) {
+        String name = (String) request.get("name");
+        String method = (String) request.get("method");
+
+        KeyManager.Log(Level.INFO, String.format("Received request from %s", name));
+        KeyManager.Log(Level.INFO, String.format("Requested method: %s", method));
+
         JSONObject jsonObject = new JSONObject();
 
         switch (method) {
@@ -82,6 +84,14 @@ public class KeyManagementServerThread extends Thread {
             case "GetPublicKey":
                 DSAPublicKey pubkey = (DSAPublicKey) KeyManager.GetClientPublicKey(name);
                 jsonObject.put("Y", pubkey.getY().toString());
+                jsonObject.put("status", "200");
+                break;
+
+            case "RetrieveKey":
+                BigInteger U = new BigInteger((String) request.get("U"));
+                BigInteger V = KeyManager.RetrieveClientKey(name, U);
+
+                jsonObject.put("V", V.toString());
                 jsonObject.put("status", "200");
                 break;
 

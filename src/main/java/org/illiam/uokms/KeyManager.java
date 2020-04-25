@@ -61,6 +61,14 @@ public class KeyManager {
 
             LOG.info("Public domain is generated. Checking correctness...");
 
+            if (!dsaParameterSpec.getG().modPow(dsaParameterSpec.getQ(), dsaParameterSpec.getP()).equals(BigInteger.ONE)) {
+                throw new InvalidParameterException("G to the power of Q must be equal to 1");
+            } else {
+                LOG.info(dsaParameterSpec.getG().
+                        modPow(dsaParameterSpec.getQ().add(BigInteger.ONE), dsaParameterSpec.getP()).toString());
+                LOG.info(dsaParameterSpec.getG().toString());
+            }
+
             if (!dsaParameterSpec.getP().subtract(BigInteger.ONE).mod(dsaParameterSpec.getQ()).equals(BigInteger.ZERO)) {
                 throw new InvalidParameterException("Domain prime P - 1 must be divisible by the subprime Q");
             } else {
@@ -165,6 +173,22 @@ public class KeyManager {
             }
 
             return clients.get(name).getPublic();
+
+        } finally {
+            readerLock.unlock();
+        }
+    }
+
+    public static BigInteger RetrieveClientKey(String name, BigInteger U) {
+        Lock readerLock = rwLock.readLock();
+        try {
+            readerLock.lock();
+            if (!clients.containsKey(name)) {
+                return null;
+            }
+
+            DSAPrivateKey privKey = (DSAPrivateKey) clients.get(name).getPrivate();
+            return U.modPow(privKey.getX(), dsaParameterSpec.getP());
 
         } finally {
             readerLock.unlock();
