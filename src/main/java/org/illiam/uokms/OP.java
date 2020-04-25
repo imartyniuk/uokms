@@ -39,7 +39,6 @@ public class OP {
     public static final String U = "U";
     public static final String V = "V";
 
-
     /**
      * ReadWriteStorageEntry section. ObjId, W, and EncMsg are passed both ways.
      * */
@@ -49,13 +48,11 @@ public class OP {
     public static final String W = "W";
     public static final String EncMsg = "EncMsg";
 
-
     /**
      * UpdateKey section.
      * */
     public static final String UpdateKey = "UpdateKey";
     public static final String Delta = "Delta";
-
 
     /**
      * Error handling section.

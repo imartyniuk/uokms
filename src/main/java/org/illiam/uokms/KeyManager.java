@@ -24,17 +24,11 @@ public class KeyManager {
      * Config section.
      * */
     private static final String configFile = "kms_config.json";
-    private static long port;
     private static final String portName = "port";
-    private static String stsHost;
     private static final String stsHostName = "stsHost";
-    private static long stsPort;
     private static final String stsPortName = "stsPort";
-    private static long runPeriod;
     private static final String runPeriodName = "runPeriod";
-    private static long updPeriod;
     private static final String updPeriodName = "updPeriod";
-
 
     /**
      * Logging section.
@@ -370,7 +364,6 @@ public class KeyManager {
 
     private static void startKeyManagementServer() {
         JSONObject jsonObject = loadConfig();
-        System.out.println(jsonObject.get(portName).getClass());
 
         long port = (long) jsonObject.get(portName);
         String stsHost = (String) jsonObject.get(stsHostName);

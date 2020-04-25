@@ -1,0 +1,6 @@
+{
+  "port": 9708,
+
+  "kmsHost": "localhost",
+  "kmsPort": 9809
+}

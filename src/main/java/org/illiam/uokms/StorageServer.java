@@ -12,14 +12,19 @@ public class StorageServer {
     /**
      * Members that provide server functionality.
      * **/
-    private static final int port = 9708;
-
-    private static int kmsPort = 9809;
-    private static String kmsHost = "localhost";
+    private final int port;
+    private final int kmsPort;
+    private final String kmsHost;
 
     private ServerSocket serverSocket;
-
     private Socket kmsSocket;
+
+    public StorageServer(int port, String kmsHost, int kmsPort) {
+        this.port = port;
+        this.kmsHost = kmsHost;
+        this.kmsPort = kmsPort;
+    }
+
 
     public void Start() {
         // Communicate with the KMS to check if it's up and get the Domain Parameters.
@@ -37,8 +42,6 @@ public class StorageServer {
 
             while (true) {
                 Socket socket = serverSocket.accept();
-                Storage.Log(Level.INFO, "New client is connected");
-
                 new StorageServerThread(socket).start();
             }
 

@@ -1,7 +1,13 @@
 package main.java.org.illiam.uokms;
 
 import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.math.BigInteger;
 import java.security.spec.DSAParameterSpec;
 import java.util.HashMap;
@@ -14,24 +20,78 @@ import java.util.logging.Logger;
 
 public class Storage {
 
+    /**
+     * Config section.
+     * */
+    private static final String configFile = "sts_config.json";
+    private static final String portName = "port";
+    private static final String kmsHostName = "kmsHost";
+    private static final String kmsPortName = "kmsPort";
+
+    /**
+     * Logging section.
+     * */
     private static Logger LOG = Logger.getLogger(Storage.class.getName());
+
+    /**
+     * Storage GUID.
+     * */
     private static UUID uuid = UUID.randomUUID();
 
+    /**
+     * Clients' data.
+     * */
     private static ReadWriteLock rwLock;
-    private static DSAParameterSpec dsaParameterSpec;
-
     private static HashMap<String, ClientInformation> clientData;
+
+    /**
+     * Domain parameters.
+     * */
+    private static DSAParameterSpec dsaParameterSpec;
 
     public static void main(String[] args) {
         initializeStorage();
 
-        StorageServer storageServer = new StorageServer();
-        storageServer.Start();
+        startStorageServer();
     }
 
     private static void initializeStorage() {
         rwLock = new ReentrantReadWriteLock();
         clientData = new HashMap<>();
+    }
+
+    private static void startStorageServer() {
+        JSONObject jsonObject = loadConfig();
+
+        long port = (long) jsonObject.get(portName);
+        String kmsHost = (String) jsonObject.get(kmsHostName);
+        long kmsPort = (long) jsonObject.get(kmsPortName);
+
+        StorageServer storageServer = new StorageServer((int)port, kmsHost, (int)kmsPort);
+        storageServer.Start();
+    }
+
+    private static JSONObject loadConfig() {
+        try {
+            ClassLoader classLoader = new Storage().getClass().getClassLoader();
+            InputStream is = classLoader.getResourceAsStream(configFile);
+            BufferedReader br = new BufferedReader(new InputStreamReader(is));
+
+            StringBuilder sb = new StringBuilder();
+            String text;
+            while((text = br.readLine()) != null) {
+                sb.append(text);
+            }
+
+            JSONParser jsonParser = new JSONParser();
+            return (JSONObject) jsonParser.parse(sb.toString());
+
+        } catch (IOException | ParseException ex) {
+            ex.printStackTrace();
+            System.exit(1);
+        }
+
+        return null;
     }
 
     public static void WriteStorageEntry(String client, String objId, String w, String encryptedMessage) {
@@ -91,13 +151,9 @@ public class Storage {
         BigInteger P = new BigInteger(p);
         BigInteger Q = new BigInteger(q);
         BigInteger G = new BigInteger(g);
-
         dsaParameterSpec = new DSAParameterSpec(P, Q, G);
 
         LOG.info("Successfully received domain parameters!");
-        LOG.info(String.format("Value of P:\n%s\n", dsaParameterSpec.getP()));
-        LOG.info(String.format("Value of Q:\n%s\n", dsaParameterSpec.getQ()));
-        LOG.info(String.format("Value of G:\n%s\n", dsaParameterSpec.getG()));
 
         return dsaParameterSpec;
     };
