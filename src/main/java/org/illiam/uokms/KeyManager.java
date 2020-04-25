@@ -5,7 +5,8 @@ import java.security.*;
 import java.security.interfaces.DSAPrivateKey;
 import java.security.interfaces.DSAPublicKey;
 import java.security.spec.*;
-import java.util.HashMap;
+import java.time.LocalTime;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -21,6 +22,9 @@ public class KeyManager {
 
     private static ReadWriteLock rwLock;
     private static HashMap<String, KeyPair> clients;
+    private static HashMap<String, LocalTime> lastUpdated;
+
+    private static HashSet<String> keysBeingUpdated;
 
     private static KeyManagementServer kms;
 
@@ -48,6 +52,8 @@ public class KeyManager {
     private static void initializeClientStorage() {
         rwLock = new ReentrantReadWriteLock();
         clients = new HashMap<>();
+        lastUpdated = new HashMap<>();
+        keysBeingUpdated = new HashSet<>();
     }
 
     private static void initializeEnvironment(int bitSize) {
@@ -113,11 +119,17 @@ public class KeyManager {
         LOG.info(String.format("Using bit size: %d", bitSize));
     }
 
+    /**
+     * Client enrollment section.
+     * */
+
     public static AlgorithmParameterSpec GetDomainParameters() {
         Lock readLock = rwLock.readLock();
         try {
             readLock.lock();
-            return dsaParameterSpec;
+            DSAParameterSpec dsaPS = new DSAParameterSpec(
+                    dsaParameterSpec.getP(), dsaParameterSpec.getQ(), dsaParameterSpec.getG());
+            return dsaPS;
         } finally {
             readLock.unlock();
         }
@@ -125,46 +137,77 @@ public class KeyManager {
 
     public static boolean EnrollClient(String name) {
         try {
-            DSAParameterSpec dsaParamSpec = (DSAParameterSpec) GetDomainParameters();
 
-            KeyPairGenerator kpg = KeyPairGenerator.getInstance("DSA");
-            kpg.initialize(dsaParamSpec);
-
-            KeyPair kp = kpg.generateKeyPair();
-            DSAPublicKey publicKey = (DSAPublicKey) kp.getPublic();
-            DSAPrivateKey privateKey = (DSAPrivateKey) kp.getPrivate();
-
+            KeyPair kp = GenKeyPair();
             LOG.info(String.format("Successfully created the key pair for the client '%s'.", name));
 
-            LOG.info("Checking the correctness of the generated values...");
-            if (!dsaParamSpec.getG().modPow(privateKey.getX(), dsaParamSpec.getP()).equals(publicKey.getY())) {
-                LOG.warning("Something's wrong with generated keys. Aborting...");
-                return false;
-            }
-
-            LOG.info("The generated keys are correct! Enrolling the client...");
-            updateClient(name, kp);
+            UpdateClient(name, kp);
             LOG.info(String.format("The client '%s' was successfully enrolled!", name));
 
             return true;
 
-        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException ex) {
+        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | InvalidKeyException ex) {
             LOG.warning(String.format("Error enrolling a client '%s': %s", name, ex.getMessage()));
             return false;
         }
     }
 
-    private static void updateClient(String name, KeyPair kp) {
+    public static KeyPair GenKeyPair()
+            throws InvalidAlgorithmParameterException, InvalidKeyException, NoSuchAlgorithmException {
+        DSAParameterSpec dsaParamSpec = (DSAParameterSpec) GetDomainParameters();
+
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance("DSA");
+        kpg.initialize(dsaParamSpec);
+
+        KeyPair kp = kpg.generateKeyPair();
+        DSAPublicKey publicKey = (DSAPublicKey) kp.getPublic();
+        DSAPrivateKey privateKey = (DSAPrivateKey) kp.getPrivate();
+
+        LOG.info("Checking the correctness of the generated values...");
+        if (!dsaParamSpec.getG().modPow(privateKey.getX(), dsaParamSpec.getP()).equals(publicKey.getY())) {
+            LOG.severe("Something's wrong with generated keys. Aborting...");
+            throw new InvalidKeyException();
+        }
+        LOG.info("The generated keys are correct!");
+
+        return kp;
+    }
+
+    public static void UpdateClient(String name, KeyPair kp) {
         Lock writeLock = rwLock.writeLock();
         try {
             writeLock.lock();
             clients.put(name, kp);
+            lastUpdated.put(name, LocalTime.now());
         } finally {
             writeLock.unlock();
         }
     }
 
+    private static KeyPair getClientKeyPair(String name) {
+        Lock readerLock = rwLock.readLock();
+        try {
+            readerLock.lock();
+            if (!clients.containsKey(name)) {
+                return null;
+            }
+
+            return clients.get(name);
+
+        } finally {
+            readerLock.unlock();
+        }
+    }
+
+    /**
+     * Client section used for decryption.
+     * */
+
     public static PublicKey GetClientPublicKey(String name) {
+        if (isBeingUpdated(name)) {
+            return null;
+        }
+
         Lock readerLock = rwLock.readLock();
         try {
             readerLock.lock();
@@ -180,6 +223,10 @@ public class KeyManager {
     }
 
     public static BigInteger RetrieveClientKey(String name, BigInteger U) {
+        if (isBeingUpdated(name)) {
+            return null;
+        }
+
         Lock readerLock = rwLock.readLock();
         try {
             readerLock.lock();
@@ -195,6 +242,74 @@ public class KeyManager {
         }
     }
 
+    /**
+     * Section used by the KeyUpdater.
+     * */
+
+    public static BigInteger GenDelta(String name, KeyPair newKeyPair) {
+        DSAParameterSpec dsaParameterSpec = (DSAParameterSpec) GetDomainParameters();
+        KeyPair oldKeyPair = getClientKeyPair(name);
+
+        BigInteger oldKey = ((DSAPrivateKey) oldKeyPair.getPrivate()).getX();
+        BigInteger newKey = ((DSAPrivateKey) newKeyPair.getPrivate()).getX();
+
+        return oldKey.multiply(newKey.modInverse(dsaParameterSpec.getQ())).mod(dsaParameterSpec.getQ());
+    }
+
+    public static Object[] GetClients() {
+        Lock readerLock = rwLock.readLock();
+        try {
+            readerLock.lock();
+            return clients.keySet().toArray().clone();
+        } finally {
+            readerLock.unlock();
+        }
+    }
+
+    public static LocalTime GetLastUpdated(String name) {
+        Lock readerLock = rwLock.readLock();
+        try {
+            readerLock.lock();
+            if (!lastUpdated.containsKey(name)) {
+                return null;
+            }
+
+            return lastUpdated.get(name);
+
+        } finally {
+            readerLock.unlock();
+        }
+    }
+
+    public static void SetUpdateState(String name, boolean startUpdating) {
+        Lock writeLock = rwLock.writeLock();
+        try {
+            writeLock.lock();
+            if (startUpdating) {
+                keysBeingUpdated.add(name);
+            } else {
+                keysBeingUpdated.remove(name);
+            }
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    private static boolean isBeingUpdated(String name) {
+        Lock readLock = rwLock.readLock();
+        try {
+            readLock.lock();
+            return keysBeingUpdated.contains(name);
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+
+    /**
+     * Main server section.
+     * */
+
     private static void startKeyManagementServer() {
         kms = new KeyManagementServer();
         kms.Start();
@@ -205,18 +320,97 @@ public class KeyManager {
     }
 
     /***
-     * This is a testing section.
+     * Testing section.
      * TODO: Enhance with more complex cases.
      ***/
     private static void test() {
         String dummy = "lalala";
+        try {
+            if (EnrollClient(dummy)) {
+                DSAPublicKey publicKey = (DSAPublicKey) GetClientPublicKey(dummy);
+                LOG.info(String.format("Successfully retrieved client's '%s' public key: %s",
+                        dummy, publicKey.getY().toString()));
 
-        if (EnrollClient(dummy)) {
-            DSAPublicKey publicKey = (DSAPublicKey) GetClientPublicKey(dummy);
-            LOG.info(String.format("Successfully retrieved client's '%s' public key: %s",
-                    dummy, publicKey.getY().toString()));
-        } else {
-            LOG.warning(String.format("Enrolling of a client '%s' failed!", dummy));
-        }
+                KeyPair initialKeyPair = KeyManager.getClientKeyPair(dummy);
+                DSAPublicKey initialPub = (DSAPublicKey) initialKeyPair.getPublic();
+                DSAPrivateKey initialPriv = (DSAPrivateKey) initialKeyPair.getPrivate();
+
+                BigInteger r = genEncryptionKey();
+                BigInteger initialW = dsaParameterSpec.getG().modPow(r, dsaParameterSpec.getP());
+                BigInteger initialEnc = initialPub.getY().modPow(r, dsaParameterSpec.getP());
+                BigInteger initialPow = initialW.modPow(initialPriv.getX(), dsaParameterSpec.getP());
+
+                BigInteger oldW = initialW;
+                for (int i = 0; i < 5; ++i) {
+                    KeyPair newKeyPair = KeyManager.GenKeyPair();
+                    KeyPair oldKeyPair = KeyManager.getClientKeyPair(dummy);
+                    BigInteger delta = KeyManager.GenDelta(dummy, newKeyPair);
+                    DSAPublicKey oldPub = (DSAPublicKey) oldKeyPair.getPublic();
+                    DSAPublicKey newPub = (DSAPublicKey) newKeyPair.getPublic();
+                    DSAPrivateKey oldPriv = (DSAPrivateKey) oldKeyPair.getPrivate();
+                    DSAPrivateKey newPriv = (DSAPrivateKey) newKeyPair.getPrivate();
+
+                    LOG.info(String.format("Generated delta:\n%s", delta));
+                    //LOG.info(String.format("Generated private:\n%s", newPriv.getX().toString()));
+                    //LOG.info(String.format("Old private:\n%s", oldPriv.getX().toString()));
+                    //LOG.info(String.format("Generated public:\n%s", newPub.getY().toString()));
+                    //LOG.info(String.format("Old public:\n%s", oldPub.getY().toString()));
+
+                    BigInteger mult = newPub.getY().modPow(delta, dsaParameterSpec.getP());
+                    LOG.info(String.format("New public to delta:\n%s", mult.toString()));
+                    if (mult.equals(oldPub.getY())) {
+                        LOG.info("OK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                    } else {
+                        LOG.severe("NO>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+                    }
+
+                    BigInteger newW = oldW.modPow(delta, dsaParameterSpec.getP());
+                    if (newW.modPow(newPriv.getX(), dsaParameterSpec.getP()).equals(initialPow)) {
+                        LOG.info("AGAIN OK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                    } else {
+                        LOG.severe("AGAIN NO>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+                    }
+
+                    BigInteger rr = genEncryptionKey();
+                    //LOG.info(String.format("This is r:\n%s", r.toString()));
+                    //LOG.info(String.format("This is rr:\n%s", rr.toString()));
+
+                    BigInteger u = newW.modPow(rr, dsaParameterSpec.getP());
+                    //LOG.info(String.format("This is u:\n%s", u.toString()));
+
+                    BigInteger v = u.modPow(newPriv.getX(), dsaParameterSpec.getP());
+                    //LOG.info(String.format("This is v:\n%s", v.toString()));
+
+                    BigInteger rrInverse = rr.modInverse(dsaParameterSpec.getQ());
+                    //LOG.info(String.format("This is inverse to rr:\n%s", rrInverse.toString()));
+
+                    BigInteger newEnc = v.modPow(rrInverse, dsaParameterSpec.getP());
+                    LOG.info(String.format("Old enc:\n%s", initialEnc.toString()));
+                    LOG.info(String.format("New enc:\n%s", newEnc.toString()));
+
+                    if (newEnc.equals(initialEnc)) {
+                        LOG.info("AGAIN AGAIN OK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                    } else {
+                        LOG.severe("AGAIN AGAIN NO>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+                    }
+
+                    UpdateClient(dummy, newKeyPair);
+                    oldW = newW;
+                }
+
+
+            } else {
+                LOG.warning(String.format("Enrolling of a client '%s' failed!", dummy));
+            }
+        } catch(Exception ex) {}
+    }
+
+    private static BigInteger genEncryptionKey() {
+        int qBitSize = dsaParameterSpec.getQ().bitCount();
+        Random rnd = new Random();
+        int bitSize = rnd.nextInt(qBitSize);
+        while(bitSize < qBitSize / 2) { bitSize = rnd.nextInt(qBitSize); }
+
+        return BigInteger.probablePrime(bitSize, new Random());
     }
 }

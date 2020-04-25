@@ -19,6 +19,9 @@ public class KeyManagementServer {
             serverSocket = new ServerSocket(port);
             KeyManager.Log(Level.INFO, String.format("The server is listening on port %d", port));
 
+            new KeyUpdaterThread().start();
+            KeyManager.Log(Level.INFO, "KeyUpdater thread has started");
+
             while (true) {
                 Socket socket = serverSocket.accept();
                 KeyManager.Log(Level.INFO, "New client is connected");

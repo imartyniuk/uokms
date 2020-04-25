@@ -54,13 +54,32 @@ public class Storage {
         Lock readLock = rwLock.readLock();
         try {
             readLock.lock();
+            LOG.info(String.format("ReadStorageEntry: '%s'", client));
             if (!clientData.containsKey(client)) {
                 return null;
             }
+
             return clientData.get(client).GetEntry(objId);
 
         } finally {
             readLock.unlock();
+        }
+    }
+
+    public static boolean UpdateKey(String client, BigInteger delta) {
+        Lock writeLock = rwLock.writeLock();
+        try {
+            writeLock.lock();
+            LOG.info(String.format("UpdateKey: '%s'", client));
+            if (!clientData.containsKey(client)) {
+                clientData.put(client, new ClientInformation());
+            }
+
+            clientData.get(client).SetDelta(delta, dsaParameterSpec.getP());
+            return true;
+
+        } finally {
+            writeLock.unlock();
         }
     }
 

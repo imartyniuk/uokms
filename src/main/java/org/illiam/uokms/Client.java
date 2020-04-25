@@ -54,7 +54,7 @@ public class Client {
     private BigInteger dsaPublicKey;
     private boolean enrollmentStatus;
 
-    private HashMap<UUID, BigInteger> encryptionKeys;
+    private BigInteger encKeyToErase;
     private HashMap<UUID, IvParameterSpec> ivParameterSpecs;
 
     private String MSG = "is there anybody out here?";
@@ -72,11 +72,18 @@ public class Client {
 
         BigInteger encKey = client.retrieveKey(entry);
         client.decryptWithKey(entry.encryptedMessage, encKey, client.ivParameterSpecs.get(objId));
+
+        LOG.info("Sleeping for 1 minute...");
+        try {TimeUnit.MINUTES.sleep(1);} catch (InterruptedException ignore) {}
+
+        ClientInformation.ClientEntry newEntry = client.getMessage(objId.toString());
+
+        BigInteger newEncKey = client.retrieveKey(newEntry);
+        client.decryptWithKey(newEntry.encryptedMessage, newEncKey, client.ivParameterSpecs.get(objId));
     }
 
     private Client() {
         uuid = UUID.randomUUID();
-        encryptionKeys = new HashMap<>();
         ivParameterSpecs = new HashMap<>();
         LOG.info(String.format("Created a client with an id: %s", uuid.toString()));
     }
@@ -108,7 +115,13 @@ public class Client {
                 System.exit(1);
             }
 
-            dsaPublicKey = (BigInteger) communicate(kmsHost, kmsPort, genGetPublicKeyRequest(), processPublicKey);
+            String pubKeyResult = (String) communicate(kmsHost, kmsPort, genGetPublicKeyRequest(), processPublicKey);
+            if (pubKeyResult.equals("error")) {
+                LOG.info("Public key was not retrieved!");
+                return;
+            }
+
+            dsaPublicKey = new BigInteger(pubKeyResult);
             LOG.info("Public key was retrieved successfully!");
 
         } catch (IOException | ParseException ex) {
@@ -125,14 +138,17 @@ public class Client {
             BigInteger rr = genEncryptionKey();
             BigInteger U = new BigInteger(entry.w).modPow(rr, dsaParameterSpec.getP());
 
-            BigInteger V = (BigInteger) communicate(kmsHost, kmsPort, genRetrieveKeyRequest(U), processRetrieveKey);
+            String v = (String) communicate(kmsHost, kmsPort, genRetrieveKeyRequest(U), processRetrieveKey);
+            while(v.equals("error")) {
+                LOG.warning("Sleeping because could not retrieve a key");
+                TimeUnit.MILLISECONDS.sleep(100);
+                v = (String) communicate(kmsHost, kmsPort, genRetrieveKeyRequest(U), processRetrieveKey);
+            }
+            BigInteger V = new BigInteger(v);
             LOG.info("The key was retrieved successfully!");
 
             BigInteger rrInverse = rr.modInverse(dsaParameterSpec.getQ());
             key = V.modPow(rrInverse, dsaParameterSpec.getP());
-
-            LOG.info("Sleeping for 3 seconds");
-            TimeUnit.SECONDS.sleep(3);
 
         } catch (IOException | ParseException ex) {
             LOG.severe(String.format("Error running client: %s", ex.getMessage()));
@@ -147,15 +163,11 @@ public class Client {
         try {
             LOG.info(String.format("Storing message: '%s'", msg));
             communicate(stsHost, stsPort, genWriteStorageEntryRequest(msg), processWriteStorageEntryResponse);
-
-            LOG.info("Sleeping for 3 seconds");
-            TimeUnit.SECONDS.sleep(3);
-
         } catch (IOException | ParseException | InvalidKeyException ex) {
             LOG.severe(String.format("Error storing a message: %s", ex.getMessage()));
             ex.printStackTrace();
             System.exit(1);
-        } catch (InterruptedException ignore) {}
+        }
     }
 
     private ClientInformation.ClientEntry getMessage(String objId) {
@@ -165,14 +177,10 @@ public class Client {
             LOG.info(String.format("Getting message: '%s'", objId));
             entry = (ClientInformation.ClientEntry) communicate(
                             stsHost, stsPort, genReadStorageEntryRequest(objId), processReadStorageEntryResponse);
-
-            LOG.info("Sleeping for 3 seconds");
-            TimeUnit.SECONDS.sleep(3);
-
         } catch (IOException | ParseException ex) {
             LOG.severe(String.format("Error storing a message: %s", ex.getMessage()));
             System.exit(1);
-        } catch (InterruptedException ignore) {}
+        }
 
         return entry;
     }
@@ -251,10 +259,15 @@ public class Client {
     private IResponseProcessor processPublicKey = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        String y = (String) jsonObject.get("Y");
-        LOG.info(String.format("Successfully received a public key:\n%s", y));
+        if (jsonObject.containsKey("Y")) {
+            String y = (String) jsonObject.get("Y");
+            LOG.info(String.format("Successfully received a public key:\n%s", y));
 
-        return new BigInteger(y);
+            return y;
+        }
+
+        LOG.warning(String.format("Error: %s", jsonObject.get("error")));
+        return "error";
     };
 
     private String genGetPublicKeyRequest() {
@@ -273,10 +286,15 @@ public class Client {
     private IResponseProcessor processRetrieveKey = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        String v = (String) jsonObject.get("V");
-        LOG.info(String.format("Successfully retrieved a key:\n%s", v));
+        if (jsonObject.containsKey("V")) {
+            String v = (String) jsonObject.get("V");
+            LOG.info(String.format("Successfully retrieved a key:\n%s", v));
 
-        return new BigInteger(v);
+            return v;
+        }
+
+        LOG.warning(String.format("Error: %s", jsonObject.get("error")));
+        return "error";
     };
 
     private String genRetrieveKeyRequest(BigInteger U) {
@@ -361,6 +379,7 @@ public class Client {
 
         try {
             BigInteger encKey = dsaPublicKey.modPow(encryptionKey, dsaParameterSpec.getP());
+            encKeyToErase = encKey; // ERASE.
             SecretKeySpec secretKeySpec = prepareSecretKey(encKey);
 
             Cipher cipher = Cipher.getInstance(SYMMETRIC_ENCRYPTION_DETAILS);
@@ -382,12 +401,19 @@ public class Client {
     }
 
     private void decryptWithKey(String encryptedMessage, BigInteger encKey, IvParameterSpec ivParameterSpec) {
+        LOG.info(encKey.toString());
+        LOG.info(encKeyToErase.toString());
         String decryptedMessage = decryptMessage(encryptedMessage, encKey, ivParameterSpec);
-        LOG.info("The message was decrypted successfully!");
+        if (!decryptedMessage.equals("error")) {
+            LOG.info("The message was decrypted successfully!");
+        }
         LOG.info(String.format("Decrypted message:\n%s", decryptedMessage));
         if (!decryptedMessage.equals(MSG)) {
             LOG.warning(String.format(
                     "Received different decrypted message. Expected: '%s', got '%s'.", MSG, decryptedMessage));
+            LOG.warning("This happens if the STS object is old, but the KMS public key is new");
+            LOG.warning("This happens when such sequence occures: GetObj -> UpdKey -> GetKey.");
+            LOG.warning("Please, safely discard the object data and retry the process");
         } else {
             LOG.info("The decryption was correct!");
         }
@@ -410,7 +436,7 @@ public class Client {
                 NoSuchAlgorithmException |
                 NoSuchPaddingException ex) {
             LOG.severe(String.format("Error decrypting a message: %s", ex.getMessage()));
-            System.exit(1);
+            return "error";
         }
 
         return decryptedMessage;

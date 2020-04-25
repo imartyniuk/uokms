@@ -83,7 +83,11 @@ public class KeyManagementServerThread extends Thread {
 
             case "GetPublicKey":
                 DSAPublicKey pubkey = (DSAPublicKey) KeyManager.GetClientPublicKey(name);
-                jsonObject.put("Y", pubkey.getY().toString());
+                if (pubkey != null) {
+                    jsonObject.put("Y", pubkey.getY().toString());
+                } else {
+                    jsonObject.put("error", "The key was not retrieved. Perhaps, it's being updated.");
+                }
                 jsonObject.put("status", "200");
                 break;
 
@@ -91,7 +95,11 @@ public class KeyManagementServerThread extends Thread {
                 BigInteger U = new BigInteger((String) request.get("U"));
                 BigInteger V = KeyManager.RetrieveClientKey(name, U);
 
-                jsonObject.put("V", V.toString());
+                if (V != null) {
+                    jsonObject.put("V", V.toString());
+                } else {
+                    jsonObject.put("error", "The key was not retrieved. Perhaps, it's being updated.");
+                }
                 jsonObject.put("status", "200");
                 break;
 

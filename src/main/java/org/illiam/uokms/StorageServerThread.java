@@ -5,6 +5,7 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.net.Socket;
 import java.util.logging.Level;
 
@@ -49,16 +50,16 @@ public class StorageServerThread extends Thread {
     private String executeRequest(JSONObject request) {
         String name = (String) request.get("name");
         String method = (String) request.get("method");
-        String objId = (String) request.get("objId");
+        String objId = null;
 
-        Storage.Log(Level.INFO, String.format("Received request from '%s'", name));
-        Storage.Log(Level.INFO, String.format("Requested method: '%s'", method));
+        Storage.Log(Level.INFO, String.format("Received request from '%s': '%s'", name, method));
 
         JSONObject jsonObject = new JSONObject();
 
         try {
             switch (method) {
                 case "WriteStorageEntry":
+                    objId = (String) request.get("objId");
                     String w = (String) request.get("W");
                     String encryptedMessage = (String) request.get("encMessage");
 
@@ -69,6 +70,7 @@ public class StorageServerThread extends Thread {
                     break;
 
                 case "ReadStorageEntry":
+                    objId = (String) request.get("objId");
                     ClientInformation.ClientEntry entry = Storage.ReadStorageEntry(name, objId);
                     if (entry == null) {
                         jsonObject.put("comment", "failed");
@@ -79,6 +81,15 @@ public class StorageServerThread extends Thread {
                         jsonObject.put("encMessage", entry.encryptedMessage);
                         jsonObject.put("status", "200");
                     }
+                    break;
+
+                case "UpdateKey":
+                    String delta = (String) request.get("delta");
+                    boolean res = Storage.UpdateKey(name, new BigInteger(delta));
+
+                    jsonObject.put("res", res);
+                    jsonObject.put("status", "200");
+
                     break;
 
                 default:

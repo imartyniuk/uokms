@@ -1,12 +1,13 @@
 package main.java.org.illiam.uokms;
 
+import java.math.BigInteger;
 import java.util.HashMap;
 
 public class ClientInformation {
 
     public class ClientEntry {
         public final String objId;
-        public final String w;
+        public String w;
         public final String encryptedMessage;
 
         public ClientEntry(String objId, String w, String encryptedMessage) {
@@ -29,4 +30,12 @@ public class ClientInformation {
         return entries.getOrDefault(objId, null);
     }
 
+    public void SetDelta(BigInteger delta, BigInteger p) {
+        for (ClientEntry entry : entries.values()) {
+            BigInteger oldW = new BigInteger(entry.w);
+            BigInteger newW = oldW.modPow(delta, p);
+            entry.w = newW.toString();
+        }
+
+    }
 }
