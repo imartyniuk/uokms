@@ -10,18 +10,21 @@ public class JsonParser {
 
     private static Logger LOG = Logger.getLogger(JsonParser.class.getName());
 
-    private static final String statusOK = "200";
-
     public static JSONObject getJson(String response) throws ParseException {
         JSONParser jsonParser = new JSONParser();
         JSONObject jsonObject = (JSONObject) jsonParser.parse(response);
 
-        String status = (String) jsonObject.get("status");
-        if (!status.equals(statusOK)) {
-            LOG.warning(String.format("Non-success code returned: %s", status));
-            return null;
+        String status = (String) jsonObject.get(OP.STATUS);
+        switch (status) {
+            case OP.StatusOk:
+                return jsonObject;
+            case OP.StatusNotFound:
+                LOG.warning(String.format("%s: %s", OP.Error, jsonObject.get(OP.Error)));
+                return null;
+            default:
+                LOG.warning(String.format("Non-success code returned: %s", status));
+                LOG.warning(String.format("%s: %s", OP.Error, jsonObject.get(OP.Error)));
+                return null;
         }
-
-        return jsonObject;
     }
 }

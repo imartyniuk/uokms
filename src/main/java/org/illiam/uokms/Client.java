@@ -204,9 +204,9 @@ public class Client {
     private IResponseProcessor processDomainParameters = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        String p = (String) jsonObject.get("P");
-        String q = (String) jsonObject.get("Q");
-        String g = (String) jsonObject.get("G");
+        String p = (String) jsonObject.get(OP.P);
+        String q = (String) jsonObject.get(OP.Q);
+        String g = (String) jsonObject.get(OP.G);
 
         BigInteger P = new BigInteger(p);
         BigInteger Q = new BigInteger(q);
@@ -223,8 +223,8 @@ public class Client {
     private String genGetDomainParametersRequest() {
         JSONObject jsonObject = new JSONObject();
 
-        jsonObject.put("name", "client-"+this.uuid.toString());
-        jsonObject.put("method", "GetDomainParameters");
+        jsonObject.put(OP.NAME, "client-"+this.uuid.toString());
+        jsonObject.put(OP.METHOD, OP.GetDomainParameters);
 
         return jsonObject.toJSONString();
     }
@@ -236,18 +236,18 @@ public class Client {
     private IResponseProcessor processEnrollClientResponse = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        String comment = (String) jsonObject.get("comment");
+        String comment = (String) jsonObject.get(OP.Comment);
         LOG.info("Successfully received EnrollClient response!");
         LOG.info(comment);
 
-        return (boolean) jsonObject.get("res");
+        return (boolean) jsonObject.get(OP.Res);
     };
 
     private String genEnrollClientRequest() {
         JSONObject jsonObject = new JSONObject();
 
-        jsonObject.put("name", "client-"+this.uuid.toString());
-        jsonObject.put("method", "EnrollClient");
+        jsonObject.put(OP.NAME, "client-"+this.uuid.toString());
+        jsonObject.put(OP.METHOD, OP.EnrollClient);
 
         return jsonObject.toJSONString();
     }
@@ -259,22 +259,22 @@ public class Client {
     private IResponseProcessor processPublicKey = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        if (jsonObject.containsKey("Y")) {
-            String y = (String) jsonObject.get("Y");
+        if (jsonObject.containsKey(OP.Y)) {
+            String y = (String) jsonObject.get(OP.Y);
             LOG.info(String.format("Successfully received a public key:\n%s", y));
 
             return y;
         }
 
-        LOG.warning(String.format("Error: %s", jsonObject.get("error")));
-        return "error";
+        LOG.warning(String.format("%s: %s", OP.Error, jsonObject.get(OP.Error)));
+        return OP.Error;
     };
 
     private String genGetPublicKeyRequest() {
         JSONObject jsonObject = new JSONObject();
 
-        jsonObject.put("name", "client-"+this.uuid.toString());
-        jsonObject.put("method", "GetPublicKey");
+        jsonObject.put(OP.NAME, "client-"+this.uuid.toString());
+        jsonObject.put(OP.METHOD, OP.GetPublicKey);
 
         return jsonObject.toJSONString();
     }
@@ -286,23 +286,23 @@ public class Client {
     private IResponseProcessor processRetrieveKey = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        if (jsonObject.containsKey("V")) {
-            String v = (String) jsonObject.get("V");
+        if (jsonObject.containsKey(OP.V)) {
+            String v = (String) jsonObject.get(OP.V);
             LOG.info(String.format("Successfully retrieved a key:\n%s", v));
 
             return v;
         }
 
-        LOG.warning(String.format("Error: %s", jsonObject.get("error")));
-        return "error";
+        LOG.warning(String.format("%s: %s", OP.Error, jsonObject.get(OP.Error)));
+        return OP.Error;
     };
 
     private String genRetrieveKeyRequest(BigInteger U) {
         JSONObject jsonObject = new JSONObject();
 
-        jsonObject.put("name", "client-"+this.uuid.toString());
-        jsonObject.put("method", "RetrieveKey");
-        jsonObject.put("U", U.toString());
+        jsonObject.put(OP.NAME, "client-"+this.uuid.toString());
+        jsonObject.put(OP.METHOD, OP.RetrieveObjectKey);
+        jsonObject.put(OP.U, U.toString());
 
         return jsonObject.toJSONString();
     }
@@ -314,9 +314,9 @@ public class Client {
     private IResponseProcessor processReadStorageEntryResponse = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        String objId = (String) jsonObject.get("objId");
-        String w = (String) jsonObject.get("W");
-        String encryptedMessage = (String) jsonObject.get("encMessage");
+        String objId = (String) jsonObject.get(OP.ObjId);
+        String w = (String) jsonObject.get(OP.W);
+        String encryptedMessage = (String) jsonObject.get(OP.EncMsg);
 
         LOG.info("Successfully received a response from storage!");
         LOG.info(String.format("Object ID:\n%s", objId));
@@ -329,16 +329,16 @@ public class Client {
     private String genReadStorageEntryRequest(String objId) {
         JSONObject jsonObject = new JSONObject();
 
-        jsonObject.put("name", "client-"+this.uuid.toString());
-        jsonObject.put("method", "ReadStorageEntry");
-        jsonObject.put("objId", objId);
+        jsonObject.put(OP.NAME, "client-"+this.uuid.toString());
+        jsonObject.put(OP.METHOD, OP.ReadStorageEntry);
+        jsonObject.put(OP.ObjId, objId);
         return jsonObject.toJSONString();
     }
 
     private IResponseProcessor processWriteStorageEntryResponse = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        String msg = (String) jsonObject.get("comment");
+        String msg = (String) jsonObject.get(OP.Comment);
         LOG.info(String.format("Successfully received a response from storage: '%s'", msg));
         return msg;
     };
@@ -365,11 +365,11 @@ public class Client {
 
         JSONObject jsonObject = new JSONObject();
 
-        jsonObject.put("name", "client-"+this.uuid.toString());
-        jsonObject.put("method", "WriteStorageEntry");
-        jsonObject.put("objId", messageId.toString());
-        jsonObject.put("W", w.toString());
-        jsonObject.put("encMessage", encryptedMessage);
+        jsonObject.put(OP.NAME, "client-"+this.uuid.toString());
+        jsonObject.put(OP.METHOD, OP.WriteStorageEntry);
+        jsonObject.put(OP.ObjId, messageId.toString());
+        jsonObject.put(OP.W, w.toString());
+        jsonObject.put(OP.EncMsg, encryptedMessage);
 
         return jsonObject.toJSONString();
     }

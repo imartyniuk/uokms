@@ -31,7 +31,7 @@ public class StorageServerThread extends Thread {
     }
 
     private String processRequest(String request) {
-        String response = "failure processing";
+        String response = OP.Error;
 
         try {
             JSONParser jsonParser = new JSONParser();
@@ -48,8 +48,8 @@ public class StorageServerThread extends Thread {
     }
 
     private String executeRequest(JSONObject request) {
-        String name = (String) request.get("name");
-        String method = (String) request.get("method");
+        String name = (String) request.get(OP.NAME);
+        String method = (String) request.get(OP.METHOD);
         String objId = null;
 
         Storage.Log(Level.INFO, String.format("Received request from '%s': '%s'", name, method));
@@ -58,43 +58,43 @@ public class StorageServerThread extends Thread {
 
         try {
             switch (method) {
-                case "WriteStorageEntry":
-                    objId = (String) request.get("objId");
-                    String w = (String) request.get("W");
-                    String encryptedMessage = (String) request.get("encMessage");
+                case OP.WriteStorageEntry:
+                    objId = (String) request.get(OP.ObjId);
+                    String w = (String) request.get(OP.W);
+                    String encryptedMessage = (String) request.get(OP.EncMsg);
 
                     Storage.WriteStorageEntry(name, objId, w, encryptedMessage);
 
-                    jsonObject.put("comment", "success");
-                    jsonObject.put("status", "200");
+                    jsonObject.put(OP.Res, OP.Success);
+                    jsonObject.put(OP.STATUS, OP.StatusOk);
                     break;
 
-                case "ReadStorageEntry":
-                    objId = (String) request.get("objId");
+                case OP.ReadStorageEntry:
+                    objId = (String) request.get(OP.ObjId);
                     ClientInformation.ClientEntry entry = Storage.ReadStorageEntry(name, objId);
                     if (entry == null) {
-                        jsonObject.put("comment", "failed");
-                        jsonObject.put("status", "500");
+                        jsonObject.put(OP.Comment, "failed");
+                        jsonObject.put(OP.STATUS, OP.StatusInternalError);
                     } else {
-                        jsonObject.put("objId", entry.objId);
-                        jsonObject.put("W", entry.w);
-                        jsonObject.put("encMessage", entry.encryptedMessage);
-                        jsonObject.put("status", "200");
+                        jsonObject.put(OP.ObjId, entry.objId);
+                        jsonObject.put(OP.W, entry.w);
+                        jsonObject.put(OP.EncMsg, entry.encryptedMessage);
+                        jsonObject.put(OP.STATUS, OP.StatusOk);
                     }
                     break;
 
                 case "UpdateKey":
-                    String delta = (String) request.get("delta");
+                    String delta = (String) request.get(OP.Delta);
                     boolean res = Storage.UpdateKey(name, new BigInteger(delta));
 
-                    jsonObject.put("res", res);
-                    jsonObject.put("status", "200");
+                    jsonObject.put(OP.Res, res);
+                    jsonObject.put(OP.STATUS, OP.StatusOk);
 
                     break;
 
                 default:
-                    jsonObject.put("resp", "Invalid request method");
-                    jsonObject.put("status", "404");
+                    jsonObject.put(OP.Error, OP.InvalidRequestMethod);
+                    jsonObject.put(OP.STATUS, OP.StatusNotFound);
             }
         } catch (Exception ex) {
             Storage.Log(Level.SEVERE, ex.getMessage());

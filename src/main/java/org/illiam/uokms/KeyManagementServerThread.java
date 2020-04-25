@@ -36,7 +36,7 @@ public class KeyManagementServerThread extends Thread {
     }
 
     private String processRequest(String request) {
-        String response = "failure processing";
+        String response = OP.Error;
 
         try {
             JSONParser jsonParser = new JSONParser();
@@ -53,59 +53,57 @@ public class KeyManagementServerThread extends Thread {
     }
 
     private String executeRequest(JSONObject request) {
-        String name = (String) request.get("name");
-        String method = (String) request.get("method");
-
-        KeyManager.Log(Level.INFO, String.format("Received request from %s", name));
-        KeyManager.Log(Level.INFO, String.format("Requested method: %s", method));
+        String name = (String) request.get(OP.NAME);
+        String method = (String) request.get(OP.METHOD);
+        KeyManager.Log(Level.INFO, String.format("Received request from '%s': '%s'", name, method));
 
         JSONObject jsonObject = new JSONObject();
 
         switch (method) {
-            case "GetDomainParameters":
+            case OP.GetDomainParameters:
                 DSAParameterSpec dsaParameterSpec = (DSAParameterSpec) KeyManager.GetDomainParameters();
 
-                jsonObject.put("P", dsaParameterSpec.getP().toString());
-                jsonObject.put("Q", dsaParameterSpec.getQ().toString());
-                jsonObject.put("G", dsaParameterSpec.getG().toString());
-                jsonObject.put("status", "200");
+                jsonObject.put(OP.P, dsaParameterSpec.getP().toString());
+                jsonObject.put(OP.Q, dsaParameterSpec.getQ().toString());
+                jsonObject.put(OP.G, dsaParameterSpec.getG().toString());
+                jsonObject.put(OP.STATUS, OP.StatusOk);
                 break;
 
-            case "EnrollClient":
+            case OP.EnrollClient:
                 boolean res = KeyManager.EnrollClient(name);
                 String comment = res ? String.format("Client '%s' was enrolled successfully", name) :
                         String.format("Failed to enroll client '%s'", name);
 
-                jsonObject.put("res", res);
-                jsonObject.put("comment", comment);
-                jsonObject.put("status", "200");
+                jsonObject.put(OP.Res, res);
+                jsonObject.put(OP.Comment, comment);
+                jsonObject.put(OP.STATUS, OP.StatusOk);
                 break;
 
-            case "GetPublicKey":
+            case OP.GetPublicKey:
                 DSAPublicKey pubkey = (DSAPublicKey) KeyManager.GetClientPublicKey(name);
                 if (pubkey != null) {
-                    jsonObject.put("Y", pubkey.getY().toString());
+                    jsonObject.put(OP.Y, pubkey.getY().toString());
                 } else {
-                    jsonObject.put("error", "The key was not retrieved. Perhaps, it's being updated.");
+                    jsonObject.put(OP.Error, "The key was not retrieved. Perhaps, it's being updated.");
                 }
-                jsonObject.put("status", "200");
+                jsonObject.put(OP.STATUS, OP.StatusOk);
                 break;
 
-            case "RetrieveKey":
-                BigInteger U = new BigInteger((String) request.get("U"));
+            case OP.RetrieveObjectKey:
+                BigInteger U = new BigInteger((String) request.get(OP.U));
                 BigInteger V = KeyManager.RetrieveClientKey(name, U);
 
                 if (V != null) {
-                    jsonObject.put("V", V.toString());
+                    jsonObject.put(OP.V, V.toString());
                 } else {
-                    jsonObject.put("error", "The key was not retrieved. Perhaps, it's being updated.");
+                    jsonObject.put(OP.Error, "The key was not retrieved. Perhaps, it's being updated.");
                 }
-                jsonObject.put("status", "200");
+                jsonObject.put(OP.STATUS, OP.StatusOk);
                 break;
 
             default:
-                jsonObject.put("resp", "Invalid request method");
-                jsonObject.put("status", "404");
+                jsonObject.put(OP.Error, OP.InvalidRequestMethod);
+                jsonObject.put(OP.STATUS, OP.StatusNotFound);
                 break;
         }
 

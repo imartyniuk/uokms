@@ -102,15 +102,15 @@ public class KeyUpdaterThread extends Thread {
 
         KeyManager.Log(Level.INFO, "Successfully received UpdateKey response!");
 
-        return (boolean) jsonObject.get("res");
+        return (boolean) jsonObject.get(OP.Res);
     };
 
     private String genUpdateKeyRequest(String name, BigInteger delta) {
         JSONObject jsonObject = new JSONObject();
 
-        jsonObject.put("name", name);
-        jsonObject.put("method", "UpdateKey");
-        jsonObject.put("delta", delta.toString());
+        jsonObject.put(OP.NAME, name);
+        jsonObject.put(OP.METHOD, OP.UpdateKey);
+        jsonObject.put(OP.Delta, delta.toString());
 
         return jsonObject.toJSONString();
     }

@@ -1,8 +1,6 @@
 package main.java.org.illiam.uokms;
 
 import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
 import java.math.BigInteger;
 import java.security.spec.DSAParameterSpec;
@@ -86,9 +84,9 @@ public class Storage {
     public static IResponseProcessor processDomainParameters = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
 
-        String p = (String) jsonObject.get("P");
-        String q = (String) jsonObject.get("Q");
-        String g = (String) jsonObject.get("G");
+        String p = (String) jsonObject.get(OP.P);
+        String q = (String) jsonObject.get(OP.Q);
+        String g = (String) jsonObject.get(OP.G);
 
         BigInteger P = new BigInteger(p);
         BigInteger Q = new BigInteger(q);
@@ -107,8 +105,8 @@ public class Storage {
     public static String genGetDomainParametersRequest() {
         JSONObject jsonObject = new JSONObject();
 
-        jsonObject.put("name", "storage-"+uuid.toString());
-        jsonObject.put("method", "GetDomainParameters");
+        jsonObject.put(OP.NAME, "storage-"+uuid.toString());
+        jsonObject.put(OP.METHOD, OP.GetDomainParameters);
 
         return jsonObject.toJSONString();
     }
