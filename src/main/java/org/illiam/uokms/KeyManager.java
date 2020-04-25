@@ -1,5 +1,10 @@
 package main.java.org.illiam.uokms;
 
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
+
+import java.io.*;
 import java.math.BigInteger;
 import java.security.*;
 import java.security.interfaces.DSAPrivateKey;
@@ -15,20 +20,50 @@ import java.util.logging.Logger;
 
 public class KeyManager {
 
+    /**
+     * Config section.
+     * */
+    private static final String configFile = "kms_config.json";
+    private static long port;
+    private static final String portName = "port";
+    private static String stsHost;
+    private static final String stsHostName = "stsHost";
+    private static long stsPort;
+    private static final String stsPortName = "stsPort";
+    private static long runPeriod;
+    private static final String runPeriodName = "runPeriod";
+    private static long updPeriod;
+    private static final String updPeriodName = "updPeriod";
+
+
+    /**
+     * Logging section.
+     * */
     private static Logger LOG = Logger.getLogger(KeyManager.class.getName());
 
+    /**
+     * Input arg defaults.
+     * */
     private static int bitSize = 1024;
-    private static DSAParameterSpec dsaParameterSpec;
+    private static boolean testRun = false;
 
+    /**
+     * Data, stored on the MKS.
+     * */
     private static ReadWriteLock rwLock;
     private static HashMap<String, KeyPair> clients;
     private static HashMap<String, LocalTime> lastUpdated;
-
     private static HashSet<String> keysBeingUpdated;
 
+    /**
+     * Server instance.
+     * */
     private static KeyManagementServer kms;
 
-    private static boolean testRun = false;
+    /**
+     * Domain parameters.
+     * */
+    private static DSAParameterSpec dsaParameterSpec;
 
     public static void main(String[] args) {
         try {
@@ -85,6 +120,29 @@ public class KeyManager {
             LOG.severe(String.format("Error, exiting: %s", ex.getMessage()));
             System.exit(1);
         }
+    }
+
+    private static JSONObject loadConfig() {
+        try {
+            ClassLoader classLoader = new KeyManager().getClass().getClassLoader();
+            InputStream is = classLoader.getResourceAsStream(configFile);
+            BufferedReader br = new BufferedReader(new InputStreamReader(is));
+
+            StringBuilder sb = new StringBuilder();
+            String text;
+            while((text = br.readLine()) != null) {
+                sb.append(text);
+            }
+
+            JSONParser jsonParser = new JSONParser();
+            return (JSONObject) jsonParser.parse(sb.toString());
+
+        } catch (IOException | ParseException ex) {
+            ex.printStackTrace();
+            System.exit(1);
+        }
+
+        return null;
     }
 
     private static void parseArgs(String[] args) {
@@ -311,7 +369,16 @@ public class KeyManager {
      * */
 
     private static void startKeyManagementServer() {
-        kms = new KeyManagementServer();
+        JSONObject jsonObject = loadConfig();
+        System.out.println(jsonObject.get(portName).getClass());
+
+        long port = (long) jsonObject.get(portName);
+        String stsHost = (String) jsonObject.get(stsHostName);
+        long stsPort = (long) jsonObject.get(stsPortName);
+        long runPeriod = (long) jsonObject.get(runPeriodName);
+        long updPeriod = (long) jsonObject.get(updPeriodName);
+
+        kms = new KeyManagementServer((int)port, stsHost, (int)stsPort, (int)runPeriod, (int)updPeriod);
         kms.Start();
     }
 

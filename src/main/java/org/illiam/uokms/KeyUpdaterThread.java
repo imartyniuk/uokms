@@ -17,16 +17,24 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 public class KeyUpdaterThread extends Thread {
-    private final int RUN_PERIOD = 9;
-    private final int UPDATE_PERIOD = 30;
+    private final int RUN_PERIOD;
+    private final int UPDATE_PERIOD;
 
-    private final int stsPort = 9708;
-    private final String stsHost = "localhost";
+    private final String stsHost;
+    private final int stsPort;
+
+    public KeyUpdaterThread(int runPeriod, int updPeriod, String stsHost, int stsPort) {
+        RUN_PERIOD = runPeriod;
+        UPDATE_PERIOD = updPeriod;
+        this.stsHost = stsHost;
+        this.stsPort = stsPort;
+    }
 
     public void run() {
         try {
+            KeyManager.Log(Level.INFO, "KeyUpdater thread has started");
+
             while (true) {
-                KeyManager.Log(Level.INFO, String.format("Sleeping for %d seconds...", RUN_PERIOD));
                 TimeUnit.SECONDS.sleep(RUN_PERIOD);
 
                 updateClientKeys();
@@ -72,7 +80,6 @@ public class KeyUpdaterThread extends Thread {
 
             KeyPair newKeyPair = KeyManager.GenKeyPair();
             BigInteger delta = KeyManager.GenDelta(name, newKeyPair);
-            KeyManager.Log(Level.INFO, String.format("Generated delta:\n%s", delta));
 
             KeyManager.SetUpdateState(name, true);
 
@@ -99,9 +106,6 @@ public class KeyUpdaterThread extends Thread {
 
     private IResponseProcessor processUpdateKeyResponse = (response) -> {
         JSONObject jsonObject = JsonParser.getJson(response);
-
-        KeyManager.Log(Level.INFO, "Successfully received UpdateKey response!");
-
         return (boolean) jsonObject.get(OP.Res);
     };
 

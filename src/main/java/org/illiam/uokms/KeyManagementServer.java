@@ -10,22 +10,31 @@ public class KeyManagementServer {
     /**
      * Members that provide server functionality.
      * **/
-    private static final int port = 9809;
-
+    private final int port;
+    private final String stsHost;
+    private final int stsPort;
     private ServerSocket serverSocket;
+
+    private final int runPeriod;
+    private final int updPeriod;
+
+    public KeyManagementServer(int port, String stsHost, int stsPort, int runPeriod, int updPeriod) {
+        this.port = port;
+        this.stsHost = stsHost;
+        this.stsPort = stsPort;
+        this.runPeriod = runPeriod;
+        this.updPeriod = updPeriod;
+    }
 
     public void Start() {
         try {
             serverSocket = new ServerSocket(port);
             KeyManager.Log(Level.INFO, String.format("The server is listening on port %d", port));
 
-            new KeyUpdaterThread().start();
-            KeyManager.Log(Level.INFO, "KeyUpdater thread has started");
+            new KeyUpdaterThread(runPeriod, updPeriod, stsHost, stsPort).start();
 
             while (true) {
                 Socket socket = serverSocket.accept();
-                KeyManager.Log(Level.INFO, "New client is connected");
-
                 new KeyManagementServerThread(socket).start();
             }
 
