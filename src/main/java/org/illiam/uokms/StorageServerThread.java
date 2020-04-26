@@ -58,27 +58,46 @@ public class StorageServerThread extends Thread {
 
         try {
             switch (method) {
+                case OP.EnrollClient:
+                    String y = (String) request.get(OP.Y);
+                    long revision = (long) request.get(OP.PublicKeyRevision);
+
+                    if (Storage.EnrollClient(name, new BigInteger(y), revision)) {
+                        jsonObject.put(OP.Res, OP.Success);
+                        jsonObject.put(OP.STATUS, OP.StatusOk);
+                    } else {
+                        jsonObject.put(OP.Res, OP.Error);
+                        jsonObject.put(OP.STATUS, OP.StatusInternalError);
+                    }
+                    break;
+
                 case OP.WriteStorageEntry:
                     objId = (String) request.get(OP.ObjId);
                     String w = (String) request.get(OP.W);
-                    String encryptedMessage = (String) request.get(OP.EncMsg);
+                    String encryptedObject = (String) request.get(OP.EncObj);
 
-                    Storage.WriteStorageEntry(name, objId, w, encryptedMessage);
+                    jsonObject.put(OP.ObjId, objId);
+                    if (Storage.WriteStorageEntry(name, objId, w, encryptedObject)) {
+                        jsonObject.put(OP.Res, OP.Success);
+                        jsonObject.put(OP.STATUS, OP.StatusOk);
+                    } else {
+                        jsonObject.put(OP.Res, OP.Error);
+                        jsonObject.put(OP.STATUS, OP.StatusInternalError);
+                    }
 
-                    jsonObject.put(OP.Comment, OP.Success);
-                    jsonObject.put(OP.STATUS, OP.StatusOk);
                     break;
 
                 case OP.ReadStorageEntry:
                     objId = (String) request.get(OP.ObjId);
                     ClientInformation.ClientEntry entry = Storage.ReadStorageEntry(name, objId);
                     if (entry == null) {
-                        jsonObject.put(OP.Comment, "failed");
+                        jsonObject.put(OP.Res, OP.Error);
                         jsonObject.put(OP.STATUS, OP.StatusInternalError);
                     } else {
+                        jsonObject.put(OP.Res, OP.Success);
                         jsonObject.put(OP.ObjId, entry.objId);
                         jsonObject.put(OP.W, entry.w);
-                        jsonObject.put(OP.EncMsg, entry.encryptedMessage);
+                        jsonObject.put(OP.EncObj, entry.encryptedObject);
                         jsonObject.put(OP.STATUS, OP.StatusOk);
                     }
                     break;

@@ -44,6 +44,7 @@ public class KeyManager {
     private static ReadWriteLock rwLock;
     private static HashMap<String, KeyPair> clients;
     private static HashMap<String, LocalTime> lastUpdated;
+    private static HashMap<String, Long> publicKeyRevision;
     private static HashSet<String> keysBeingUpdated;
 
     /**
@@ -79,6 +80,7 @@ public class KeyManager {
         rwLock = new ReentrantReadWriteLock();
         clients = new HashMap<>();
         lastUpdated = new HashMap<>();
+        publicKeyRevision = new HashMap<>();
         keysBeingUpdated = new HashSet<>();
     }
 
@@ -92,19 +94,8 @@ public class KeyManager {
             dsaParameterSpec = params.getParameterSpec(DSAParameterSpec.class);
 
             LOG.info("Public domain is generated. Checking correctness...");
-
-            if (!dsaParameterSpec.getG().modPow(dsaParameterSpec.getQ(), dsaParameterSpec.getP()).equals(BigInteger.ONE)) {
-                throw new InvalidParameterException("G to the power of Q must be equal to 1");
-            } else {
-                LOG.info(dsaParameterSpec.getG().
-                        modPow(dsaParameterSpec.getQ().add(BigInteger.ONE), dsaParameterSpec.getP()).toString());
-                LOG.info(dsaParameterSpec.getG().toString());
-            }
-
-            if (!dsaParameterSpec.getP().subtract(BigInteger.ONE).mod(dsaParameterSpec.getQ()).equals(BigInteger.ZERO)) {
-                throw new InvalidParameterException("Domain prime P - 1 must be divisible by the subprime Q");
-            } else {
-                LOG.info("Domain parameters were generated successfully!");
+            if (OPOracle.ValidateDomainParameters(dsaParameterSpec)) {
+                LOG.info("Domain parameters are valid!");
             }
 
         } catch (InvalidParameterSpecException | NoSuchAlgorithmException | InvalidParameterException ex) {
@@ -184,17 +175,12 @@ public class KeyManager {
 
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("DSA");
         kpg.initialize(dsaParamSpec);
-
         KeyPair kp = kpg.generateKeyPair();
-        DSAPublicKey publicKey = (DSAPublicKey) kp.getPublic();
-        DSAPrivateKey privateKey = (DSAPrivateKey) kp.getPrivate();
 
-        LOG.info("Checking the correctness of the generated values...");
-        if (!dsaParamSpec.getG().modPow(privateKey.getX(), dsaParamSpec.getP()).equals(publicKey.getY())) {
-            LOG.severe("Something's wrong with generated keys. Aborting...");
-            throw new InvalidKeyException();
+        LOG.info("Checking the correctness of the generated keys...");
+        if (OPOracle.ValidateKeyPair(dsaParamSpec, kp)) {
+            LOG.info("The generated keys are correct!");
         }
-        LOG.info("The generated keys are correct!");
 
         return kp;
     }
@@ -203,8 +189,13 @@ public class KeyManager {
         Lock writeLock = rwLock.writeLock();
         try {
             writeLock.lock();
+
             clients.put(name, kp);
             lastUpdated.put(name, LocalTime.now());
+
+            long revision = publicKeyRevision.getOrDefault(name, (long) 0);
+            publicKeyRevision.put(name, revision + 1);
+
         } finally {
             writeLock.unlock();
         }
@@ -287,6 +278,17 @@ public class KeyManager {
         try {
             readerLock.lock();
             return clients.keySet().toArray().clone();
+        } finally {
+            readerLock.unlock();
+        }
+    }
+
+    public static long GetPublicKeyRevision(String name) {
+        Lock readerLock = rwLock.readLock();
+        try {
+            readerLock.lock();
+            return publicKeyRevision.getOrDefault(name, (long) 0);
+
         } finally {
             readerLock.unlock();
         }
@@ -440,11 +442,11 @@ public class KeyManager {
     }
 
     private static BigInteger genEncryptionKey() {
-        int qBitSize = dsaParameterSpec.getQ().bitCount();
+        int qBitLen = dsaParameterSpec.getQ().bitCount();
         Random rnd = new Random();
-        int bitSize = rnd.nextInt(qBitSize);
-        while(bitSize < qBitSize / 2) { bitSize = rnd.nextInt(qBitSize); }
+        int bitLen = rnd.nextInt(qBitLen);
+        while(bitLen < qBitLen / 2) { bitLen = rnd.nextInt(qBitLen); }
 
-        return BigInteger.probablePrime(bitSize, new Random());
+        return BigInteger.probablePrime(bitLen, new Random());
     }
 }

@@ -87,7 +87,6 @@ public class KeyUpdaterThread extends Thread {
                     stsHost, stsPort, genUpdateKeyRequest(name, delta), processUpdateKeyResponse);
 
             if (res) {
-                KeyManager.Log(Level.INFO, String.format("Storage key was updated successfully!"));
                 KeyManager.UpdateClient(name, newKeyPair);
                 KeyManager.Log(Level.INFO, String.format("The key for client '%s' was updated successfully!", name));
             } else {

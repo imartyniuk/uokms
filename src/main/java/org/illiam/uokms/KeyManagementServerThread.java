@@ -69,19 +69,22 @@ public class KeyManagementServerThread extends Thread {
                 break;
 
             case OP.EnrollClient:
-                boolean res = KeyManager.EnrollClient(name);
-                String comment = res ? String.format("Client '%s' was enrolled successfully", name) :
-                        String.format("Failed to enroll client '%s'", name);
+                if (KeyManager.EnrollClient(name)) {
+                    jsonObject.put(OP.Res, OP.Success);
+                    jsonObject.put(OP.STATUS, OP.StatusOk);
+                } else {
+                    jsonObject.put(OP.Res, OP.Error);
+                    jsonObject.put(OP.STATUS, OP.StatusInternalError);
+                }
 
-                jsonObject.put(OP.Res, res);
-                jsonObject.put(OP.Comment, comment);
-                jsonObject.put(OP.STATUS, OP.StatusOk);
                 break;
 
             case OP.GetPublicKey:
                 DSAPublicKey pubkey = (DSAPublicKey) KeyManager.GetClientPublicKey(name);
-                if (pubkey != null) {
+                long revision = KeyManager.GetPublicKeyRevision(name);
+                if (pubkey != null && revision > 0) {
                     jsonObject.put(OP.Y, pubkey.getY().toString());
+                    jsonObject.put(OP.PublicKeyRevision, revision);
                 } else {
                     jsonObject.put(OP.Error, "The key was not retrieved. Perhaps, it's being updated.");
                 }

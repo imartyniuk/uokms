@@ -65,14 +65,36 @@ public class Storage {
         storageServer.Start();
     }
 
-    public static void WriteStorageEntry(String client, String objId, String w, String encryptedMessage) {
+    public static boolean EnrollClient(String client, BigInteger pubKey, long pubKeyRevision) {
+        Lock writeLock = rwLock.writeLock();
+        try {
+            writeLock.lock();
+
+            // Client is already enrolled.
+            if (clientData.containsKey(client)) {
+                return false;
+            }
+
+            clientData.put(client, new ClientInformation());
+            clientData.get(client).SetCurrentPublicKey(pubKey, pubKeyRevision);
+
+            return true;
+
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public static boolean WriteStorageEntry(String client, String objId, String w, String encryptedObject) {
         Lock writeLock = rwLock.writeLock();
         try {
             writeLock.lock();
             if (!clientData.containsKey(client)) {
-                clientData.put(client, new ClientInformation());
+                return false;
             }
-            clientData.get(client).AddEntry(objId, w, encryptedMessage);
+            clientData.get(client).AddEntry(objId, w, encryptedObject);
+
+            return true;
 
         } finally {
             writeLock.unlock();
@@ -83,7 +105,7 @@ public class Storage {
         Lock readLock = rwLock.readLock();
         try {
             readLock.lock();
-            LOG.info(String.format("ReadStorageEntry: '%s'", client));
+            LOG.info(String.format("ReadStorageEntry: '%s'", objId));
             if (!clientData.containsKey(client)) {
                 return null;
             }

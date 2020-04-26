@@ -31,6 +31,7 @@ public class OP {
      * */
     public static final String GetPublicKey = "GetPublicKey";
     public static final String Y = "Y";
+    public static final String PublicKeyRevision = "PublicKeyRevision";
 
     /**
      * RetrieveObjectKey section. U is a client-side argument, V is returned by the KMS.
@@ -46,7 +47,7 @@ public class OP {
     public static final String WriteStorageEntry = "WriteStorageEntry";
     public static final String ObjId = "ObjId";
     public static final String W = "W";
-    public static final String EncMsg = "EncMsg";
+    public static final String EncObj = "EncObj";
 
     /**
      * UpdateKey section.
