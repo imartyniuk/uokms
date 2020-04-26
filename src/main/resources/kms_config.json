@@ -4,6 +4,6 @@
   "stsHost": "localhost",
   "stsPort": 9708,
 
-  "runPeriod": 17,
-  "updPeriod": 49
+  "runPeriod": 10,
+  "updPeriod": 121
 }

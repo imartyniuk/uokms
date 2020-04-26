@@ -85,6 +85,10 @@ public class Client {
         client.runClient();
     }
 
+    /**
+     * Client functionality.
+     * */
+
     private Client(MODE mode,
                    String kmsHost, int kmsPort,
                    String stsHost, int stsPort,
@@ -139,15 +143,20 @@ public class Client {
          }
     }
 
-    private void runSimulationClient() {
-        int numberOfObjets = 3;
-        int objectLen = 10;
+    /**
+     * Simulation mode section.
+     * */
+    private static int INITIAL_NUM_OF_OBJECT = 3;
+    private static int OBJ_LEN = 10;
+    private static int SLEEPING_TIME_BOUND = 15;
+    private static int ACT_PROB_PARAM = 8;
 
+    private void runSimulationClient() {
         HashMap<String, String> objects = new HashMap<>();
 
         // Generate random strings and store them.
-        for (int i = 0; i < numberOfObjets; ++i) {
-            String rndStr = genRandomString(objectLen);
+        for (int i = 0; i < INITIAL_NUM_OF_OBJECT; ++i) {
+            String rndStr = genRandomString(OBJ_LEN);
 
             String id = this.storeObject(rndStr);
             if (id != null) {
@@ -157,18 +166,18 @@ public class Client {
         try {
             while (true) {
                 Random rndSleep = new Random();
-                int sleepingTime = rndSleep.nextInt(15);
+                int sleepingTime = rndSleep.nextInt(SLEEPING_TIME_BOUND);
                 TimeUnit.SECONDS.sleep(sleepingTime);
 
                 Random rndAction = new Random();
-                int nextAction = rndAction.nextInt(10);
+                int nextAction = rndAction.nextInt(ACT_PROB_PARAM);
 
-                // In 1 of out 10 cases we'll be creating a new random string.
-                // 9 of 10 times we'll be reading the existing ones.
+                // In 1 of out 8 cases we'll be creating a new random string.
+                // 7 of 8 times we'll be reading the existing ones.
                 if (nextAction < 1) {
                     LOG.info("Storing...");
 
-                    String rndStr = genRandomString(objectLen);
+                    String rndStr = genRandomString(OBJ_LEN);
                     String id = this.storeObject(rndStr);
 
                     if (id != null) {
@@ -178,8 +187,6 @@ public class Client {
                         if (!this.getPublicKey()) {
                             LOG.severe("Failed to update the public key!");
                         }
-
-                        continue;
                     }
 
                 } else {
@@ -225,8 +232,86 @@ public class Client {
         } catch (InterruptedException ignore) {}
     }
 
-    private void runInteractiveClient() {
+    /**
+     * Interactive section.
+     * */
 
+    private static final String EXAMPLE = "Spiderman is having me for dinner tonight";
+    private static final String EXAMPLE_ID = "12345";
+    private static final String EXIT = "exit";
+    private static final String HELP = "help";
+    private static final String LIST = "list";
+    private static final String READ = "read";
+    private static final String WRITE = "write";
+
+    private void runInteractiveClient() {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println(getWaitingString());
+
+        while(true) {
+            String cmd = scanner.nextLine();
+            if (cmd.equals(EXIT)) {
+                System.out.println("\nExiting...\n");
+
+                scanner.close();
+                System.exit(0);
+            }
+            if (cmd.equals(HELP)) {
+                System.out.println(getHelpString());
+                continue;
+            }
+
+            if (cmd.equals(LIST)) {
+                System.out.println("\nPrinting the list of object ids:");
+                for (String id: ivParameterSpecs.keySet()) {
+                    System.out.println(String.format("-> %s", id));
+                }
+                if (ivParameterSpecs.isEmpty()) {
+                    System.out.println("The list is currently empty.");
+                }
+                System.out.println();
+            } else if (cmd.startsWith(WRITE)) {
+                String obj = cmd.substring(WRITE.length()).trim();
+                System.out.println(String.format("\nWriting -> '%s'...\n", obj));
+
+                if (!this.writeObject(obj)) {
+                    System.out.println(String.format("\nError writing an object: '%s'\n", obj));
+                } else {
+                    System.out.println(String.format("\nObject '%s' was written successfully.\n", obj));
+                }
+
+            } else if (cmd.startsWith(READ)) {
+                String objId = cmd.substring(READ.length()).trim();
+                System.out.println(String.format("\nReading -> '%s'\n", objId));
+
+                String obj = this.readObject(objId);
+                if (obj == null) {
+                    System.out.println(String.format("\nCould not retrieve object '%s' from storage\n", objId));
+                } else {
+                    System.out.println(String.format("\nSuccess retrieving the object: '%s' -> '%s'\n", objId, obj));
+                }
+
+            } else {
+                System.out.println("\nUnexpected input!\n");
+            }
+
+            System.out.println(getWaitingString());
+        }
+    }
+
+    private String getHelpString() {
+        return "\nThe following commands are supported:\n".
+                concat(String.format("-> %s: writes the object to storage. Example: '%s %s'\n", WRITE, WRITE, EXAMPLE)).
+                concat(String.format("-> %s: reads the object from storage by the id. Example: '%s %s'\n", READ, READ, EXAMPLE_ID)).
+                concat(String.format("-> %s: lists the object ids. Example: '%s'\n", LIST, LIST)).
+                concat(String.format("-> %s: prints this help window. Example: '%s'\n", HELP, HELP)).
+                concat(String.format("-> %s: exits the cli. Example: '%s'\n", EXIT, EXIT));
+    }
+
+    private String getWaitingString() {
+        return "\nWaiting for the command.\n".
+                concat(String.format("Type '%s' to get the list of available commands, ", HELP)).
+                concat(String.format("type '%s' to exit.\n", EXIT));
     }
 
     private static MODE getModeFromArgs(String[] args) {
@@ -256,6 +341,47 @@ public class Client {
 
         return mode;
     }
+
+    private boolean writeObject(String obj) {
+        String id = this.storeObject(obj);
+        if (id != null) {
+            return true;
+        }
+
+        if (!this.getPublicKey()) {
+            LOG.severe("Failed to update the public key!");
+        }
+
+        return false;
+    }
+
+    private String readObject(String objId) {
+        IvParameterSpec ivParameterSpec = ivParameterSpecs.get(objId);
+        ClientInformation.ClientEntry entry = this.getObject(objId);
+
+        if (entry == null) {
+            LOG.severe("Could not retrieve the encrypted object from storage.");
+            return null;
+        }
+
+        BigInteger encKey = this.getObjectSpecificKey(entry);
+        if (encKey == null) {
+            LOG.severe("Did not retrieve the object-specific key, aborting this simulation round");
+            return null;
+        }
+
+        String decryptedObject = this.decryptWithKey(entry.encryptedObject, encKey, ivParameterSpec);
+        if (decryptedObject == null) {
+            LOG.severe("Failed to decrypt the object during this simulation");
+            return null;
+        }
+
+        return decryptedObject;
+    }
+
+    /**
+     * End of client functionality.
+     * */
 
     private void initializeClient() {
         try {
@@ -550,7 +676,8 @@ public class Client {
         try {
             JSONObject jsonObject = JsonParser.getJson(response);
 
-            if (jsonObject.get(OP.Res).equals(OP.Error)) {
+            String res = (String) jsonObject.get(OP.Res);
+            if (res.equals(OP.Error)) {
                 String objId = (String) jsonObject.get(OP.ObjId);
                 ivParameterSpecs.remove(objId);
                 LOG.warning(String.format("Failed writing to storage. Removed '%s' from the list.", objId));
