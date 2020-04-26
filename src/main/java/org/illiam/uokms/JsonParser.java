@@ -18,6 +18,12 @@ public class JsonParser {
         switch (status) {
             case OP.StatusOk:
                 return jsonObject;
+            case OP.StatusForbidden:
+                LOG.warning(String.format("Status code '%s' returned", status));
+                return null;
+            case OP.StatusInternalError:
+                LOG.warning(String.format("Status code '%s' returned", status));
+                return jsonObject;
             case OP.StatusNotFound:
                 LOG.warning(String.format("%s: %s", OP.Error, jsonObject.get(OP.Error)));
                 return null;

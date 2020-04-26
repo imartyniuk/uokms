@@ -75,14 +75,18 @@ public class StorageServerThread extends Thread {
                     objId = (String) request.get(OP.ObjId);
                     String w = (String) request.get(OP.W);
                     String encryptedObject = (String) request.get(OP.EncObj);
+                    long pubKeyRevision = (long) request.get(OP.PublicKeyRevision);
 
                     jsonObject.put(OP.ObjId, objId);
-                    if (Storage.WriteStorageEntry(name, objId, w, encryptedObject)) {
+                    if (Storage.WriteStorageEntry(name, objId, w, encryptedObject, pubKeyRevision)) {
                         jsonObject.put(OP.Res, OP.Success);
                         jsonObject.put(OP.STATUS, OP.StatusOk);
                     } else {
+                        //jsonObject.put(OP.Y, Storage.GetPublicKey(name).toString());
+                        jsonObject.put(OP.PublicKeyRevision, Storage.GetPublicKeyRevision(name));
+
                         jsonObject.put(OP.Res, OP.Error);
-                        jsonObject.put(OP.STATUS, OP.StatusInternalError);
+                        jsonObject.put(OP.STATUS, OP.StatusForbidden);
                     }
 
                     break;
@@ -102,9 +106,10 @@ public class StorageServerThread extends Thread {
                     }
                     break;
 
-                case "UpdateKey":
+                case OP.UpdateKey:
                     String delta = (String) request.get(OP.Delta);
-                    boolean res = Storage.UpdateKey(name, new BigInteger(delta));
+                    long pkRevision = (long) request.get(OP.PublicKeyRevision);
+                    boolean res = Storage.UpdateKey(name, new BigInteger(delta), pkRevision);
 
                     jsonObject.put(OP.Res, res);
                     jsonObject.put(OP.STATUS, OP.StatusOk);

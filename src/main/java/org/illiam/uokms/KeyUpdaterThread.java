@@ -114,6 +114,7 @@ public class KeyUpdaterThread extends Thread {
         jsonObject.put(OP.NAME, name);
         jsonObject.put(OP.METHOD, OP.UpdateKey);
         jsonObject.put(OP.Delta, delta.toString());
+        jsonObject.put(OP.PublicKeyRevision, KeyManager.GetPublicKeyRevision(name) + 1);
 
         return jsonObject.toJSONString();
     }

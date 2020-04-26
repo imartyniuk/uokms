@@ -76,7 +76,8 @@ public class Storage {
             }
 
             clientData.put(client, new ClientInformation());
-            clientData.get(client).SetCurrentPublicKey(pubKey, pubKeyRevision);
+            clientData.get(client).SetCurrentPublicKey(pubKey);
+            clientData.get(client).SetCurrentPublicKeyRevision(pubKeyRevision);
 
             return true;
 
@@ -85,16 +86,15 @@ public class Storage {
         }
     }
 
-    public static boolean WriteStorageEntry(String client, String objId, String w, String encryptedObject) {
+    public static boolean WriteStorageEntry(String client, String objId, String w, String encryptedObject, long revision) {
         Lock writeLock = rwLock.writeLock();
         try {
             writeLock.lock();
             if (!clientData.containsKey(client)) {
                 return false;
             }
-            clientData.get(client).AddEntry(objId, w, encryptedObject);
-
-            return true;
+            LOG.info(String.format("Writing object: '%s'", objId));
+            return clientData.get(client).AddEntry(objId, w, encryptedObject, revision);
 
         } finally {
             writeLock.unlock();
@@ -117,16 +117,47 @@ public class Storage {
         }
     }
 
-    public static boolean UpdateKey(String client, BigInteger delta) {
+    public static BigInteger GetPublicKey(String client) {
+        Lock readLock = rwLock.readLock();
+        try {
+            readLock.lock();
+            if (!clientData.containsKey(client)) {
+                return null;
+            }
+
+            return clientData.get(client).GetCurrentPublicKey();
+
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public static long GetPublicKeyRevision(String client) {
+        Lock readLock = rwLock.readLock();
+        try {
+            readLock.lock();
+            if (!clientData.containsKey(client)) {
+                return 0;
+            }
+
+            return clientData.get(client).GetCurrentPublicKeyRevision();
+
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public static boolean UpdateKey(String client, BigInteger delta, long publicKeyRevision) {
         Lock writeLock = rwLock.writeLock();
         try {
             writeLock.lock();
-            LOG.info(String.format("UpdateKey: '%s'", client));
+            LOG.info(String.format("UpdateKey revision '%d': '%s'", publicKeyRevision, client));
             if (!clientData.containsKey(client)) {
                 clientData.put(client, new ClientInformation());
             }
 
             clientData.get(client).SetDelta(delta, dsaParameterSpec.getP());
+            clientData.get(client).SetCurrentPublicKeyRevision(publicKeyRevision);
             return true;
 
         } finally {

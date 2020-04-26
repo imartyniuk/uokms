@@ -68,6 +68,7 @@ public class OP {
 
     public static final String STATUS = "status";
     public static final String StatusOk = "200";
+    public static final String StatusForbidden = "403";
     public static final String StatusNotFound = "404";
     public static final String StatusInternalError = "500";
 }

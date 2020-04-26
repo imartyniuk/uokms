@@ -7,7 +7,7 @@ import java.util.logging.Level;
 public class ClientInformation {
 
     public class ClientEntry {
-        //private int publicKeyRevision;
+        //public final long publicKeyRevision;
 
         public final String objId;
         public String w;
@@ -17,7 +17,6 @@ public class ClientInformation {
             this.objId = objId;
             this.w = w;
             this.encryptedObject = encryptedObject;
-            //this.publicKeyRevision = pubKeyRevision;
         }
     }
 
@@ -30,25 +29,28 @@ public class ClientInformation {
         entries = new HashMap<>();
     }
 
-    public void SetCurrentPublicKey(BigInteger publicKey, long pubKeyRevision) {
+    public void SetCurrentPublicKey(BigInteger publicKey) {
         currentPublicKey = publicKey;
-        currentPubKeyRevision = pubKeyRevision;
     }
 
     public BigInteger GetCurrentPublicKey() {
         return currentPublicKey;
     }
 
-    public boolean AddEntry(String objId, String w, String encryptedObject) {
-        /*if (currentPublicKey == null) {
-            currentPublicKey = pubKey;
-        }
+    public void SetCurrentPublicKeyRevision(long pubKeyRevision) {
+        currentPubKeyRevision = pubKeyRevision;
+    }
 
+    public long GetCurrentPublicKeyRevision() {
+        return currentPubKeyRevision;
+    }
+
+    public boolean AddEntry(String objId, String w, String encryptedObject, long revision) {
         // The object was encrypted with an obsolete public key.
         // Don't store and return an error.
-        if (!currentPublicKey.equals(pubKey)) {
+        if (currentPubKeyRevision > revision) {
             return false;
-        }*/
+        }
 
         entries.put(objId, new ClientEntry(objId, w, encryptedObject));
         return true;

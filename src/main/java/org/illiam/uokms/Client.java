@@ -140,7 +140,7 @@ public class Client {
     }
 
     private void runSimulationClient() {
-        int numberOfObjets = 5;
+        int numberOfObjets = 3;
         int objectLen = 10;
 
         HashMap<String, String> objects = new HashMap<>();
@@ -165,7 +165,7 @@ public class Client {
 
                 // In 1 of out 10 cases we'll be creating a new random string.
                 // 9 of 10 times we'll be reading the existing ones.
-                if (nextAction == 0) {
+                if (nextAction < 1) {
                     LOG.info("Storing...");
 
                     String rndStr = genRandomString(objectLen);
@@ -175,6 +175,11 @@ public class Client {
                         objects.put(rndStr, id);
                     } else {
                         LOG.warning(String.format("Error storing a string: '%s'", rndStr));
+                        if (!this.getPublicKey()) {
+                            LOG.severe("Failed to update the public key!");
+                        }
+
+                        continue;
                     }
 
                 } else {
@@ -193,7 +198,7 @@ public class Client {
                         continue;
                     }
 
-                    BigInteger encKey = this.retrieveKey(entry);
+                    BigInteger encKey = this.getObjectSpecificKey(entry);
                     if (encKey == null) {
                         LOG.severe("Did not retrieve the object-specific key, aborting this simulation round");
                         continue;
@@ -252,7 +257,7 @@ public class Client {
         return mode;
     }
 
-    private boolean initializeClient() {
+    private void initializeClient() {
         try {
             dsaParameterSpec = (DSAParameterSpec) communicate(
                     kmsHost, kmsPort, genGetDomainParametersRequest(), processDomainParameters);
@@ -267,12 +272,9 @@ public class Client {
             }
             LOG.info("The client was successfully enrolled for KMS!");
 
-            String pubKeyResult = (String) communicate(kmsHost, kmsPort, genGetPublicKeyRequest(), processPublicKey);
-            if (pubKeyResult.equals(OP.Error)) {
+            if (!getPublicKey()) {
                 throw new InvalidParameterException("The public key was not retrieved!");
             }
-
-            dsaPublicKey = new BigInteger(pubKeyResult);
             LOG.info("The public key was retrieved successfully!");
 
             enrollmentStatus = (boolean) communicate(
@@ -287,11 +289,26 @@ public class Client {
             ex.printStackTrace();
             System.exit(1);
         }
-
-        return true;
     }
 
-    private BigInteger retrieveKey(ClientInformation.ClientEntry entry) {
+    private boolean getPublicKey() {
+        try {
+            String pubKeyResult = (String) communicate(kmsHost, kmsPort, genGetPublicKeyRequest(), processPublicKey);
+            if (pubKeyResult.equals(OP.Error)) {
+                return false;
+            }
+
+            dsaPublicKey = new BigInteger(pubKeyResult);
+            return true;
+
+        } catch (IOException | ParseException ex) {
+            LOG.severe(String.format("Error getting a public key: %s", ex.getMessage()));
+            ex.printStackTrace();
+            return false;
+        }
+    }
+
+    private BigInteger getObjectSpecificKey(ClientInformation.ClientEntry entry) {
         try {
             BigInteger rr = genEncryptionKey();
             BigInteger U = new BigInteger(entry.w).modPow(rr, dsaParameterSpec.getP());
@@ -538,6 +555,13 @@ public class Client {
                 ivParameterSpecs.remove(objId);
                 LOG.warning(String.format("Failed writing to storage. Removed '%s' from the list.", objId));
 
+                long revision = (long) jsonObject.get(OP.PublicKeyRevision);
+                LOG.info(String.format("Storage revision vs client revision: '%d' vs '%d'", revision, publicKeyRevision));
+                if (revision > publicKeyRevision) {
+                    LOG.warning("Your public key is out of date.\n".
+                            concat("Please, update your public key, otherwise you won't be able to read from storage"));
+                }
+
                 return null;
             }
             return jsonObject.get(OP.ObjId);
@@ -574,6 +598,7 @@ public class Client {
         jsonObject.put(OP.ObjId, objId);
         jsonObject.put(OP.W, w.toString());
         jsonObject.put(OP.EncObj, encryptedObject);
+        jsonObject.put(OP.PublicKeyRevision, publicKeyRevision);
 
         return jsonObject.toJSONString();
     }
