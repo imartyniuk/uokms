@@ -65,7 +65,7 @@ public class StorageServerThread extends Thread {
 
                     Storage.WriteStorageEntry(name, objId, w, encryptedMessage);
 
-                    jsonObject.put(OP.Res, OP.Success);
+                    jsonObject.put(OP.Comment, OP.Success);
                     jsonObject.put(OP.STATUS, OP.StatusOk);
                     break;
 

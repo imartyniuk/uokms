@@ -1,10 +1,7 @@
 package main.java.org.illiam.uokms;
 
 import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
-import java.io.*;
 import java.math.BigInteger;
 import java.security.*;
 import java.security.interfaces.DSAPrivateKey;
@@ -114,29 +111,6 @@ public class KeyManager {
             LOG.severe(String.format("Error, exiting: %s", ex.getMessage()));
             System.exit(1);
         }
-    }
-
-    private static JSONObject loadConfig() {
-        try {
-            ClassLoader classLoader = new KeyManager().getClass().getClassLoader();
-            InputStream is = classLoader.getResourceAsStream(configFile);
-            BufferedReader br = new BufferedReader(new InputStreamReader(is));
-
-            StringBuilder sb = new StringBuilder();
-            String text;
-            while((text = br.readLine()) != null) {
-                sb.append(text);
-            }
-
-            JSONParser jsonParser = new JSONParser();
-            return (JSONObject) jsonParser.parse(sb.toString());
-
-        } catch (IOException | ParseException ex) {
-            ex.printStackTrace();
-            System.exit(1);
-        }
-
-        return null;
     }
 
     private static void parseArgs(String[] args) {
@@ -363,7 +337,7 @@ public class KeyManager {
      * */
 
     private static void startKeyManagementServer() {
-        JSONObject jsonObject = loadConfig();
+        JSONObject jsonObject = ConfigLoader.LoadConfig(configFile);
 
         long port = (long) jsonObject.get(portName);
         String stsHost = (String) jsonObject.get(stsHostName);

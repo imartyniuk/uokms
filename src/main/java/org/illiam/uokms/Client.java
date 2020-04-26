@@ -23,29 +23,44 @@ import java.util.logging.Logger;
 
 public class Client {
 
+    /**
+     * Config section.
+     * */
+    private static final String configFile = "client_config.json";
+    private static final String kmsHostName = "kmsHost";
+    private static final String kmsPortName = "kmsPort";
+    private static final String stsHostName = "stsHost";
+    private static final String stsPortName = "stsPort";
+    private static final String symAlgoName = "symEncAlgo";
+    private static final String symAlgoDetailsName = "symEncAlgoDetails";
+    private static final String hashAlgoName = "hashAlgo";
+    private static final String hashKeyLenName = "hashKeyLen";
+
+    /**
+     * Logging section.
+     * */
     private static Logger LOG = Logger.getLogger(Client.class.getName());
 
     /**
      * Communication constants.
      */
-    private static int kmsPort = 9809;
-    private static int stsPort = 9708;
-    private static String kmsHost = "localhost";
-    private static String stsHost = "localhost";
+    private final String kmsHost;
+    private final int kmsPort;
+    private final String stsHost;
+    private final int stsPort;
 
     /**
      * Crypto constants.
      * */
-    private static final int SHA_KEY_LENGTH = 16;
-    private static final String SYMMETRIC_ENCRYPTION_DETAILS = "AES/CBC/PKCS5Padding";
-    private static final String SYMMETRIC_ENCRYPTION_ALGO = "AES";
-    private static final String HASH_ALGO = "SHA-1";
+    private final String SYMMETRIC_ENCRYPTION_ALGO;
+    private final String SYMMETRIC_ENCRYPTION_DETAILS;
+    private final String HASH_ALGO;
+    private final int HASH_KEY_LENGTH;
 
     /**
      * Client identification and communication fields.
      * */
     private UUID uuid;
-    //private Socket kmsSocket;
 
     /**
      * Crypto fields.
@@ -54,7 +69,6 @@ public class Client {
     private BigInteger dsaPublicKey;
     private boolean enrollmentStatus;
 
-    private BigInteger encKeyToErase;
     private HashMap<UUID, IvParameterSpec> ivParameterSpecs;
 
     private String MSG = "is there anybody out here?";
@@ -62,8 +76,8 @@ public class Client {
     public static void main(String[] args) {
         parseArgs(args);
 
-        Client client = new Client();
-        client.runKms(kmsHost, kmsPort);
+        Client client = createClient();
+        client.runKms();
 
         client.storeMessage(client.MSG);
         UUID objId = (UUID) client.ivParameterSpecs.keySet().toArray()[0];
@@ -82,25 +96,52 @@ public class Client {
         client.decryptWithKey(newEntry.encryptedMessage, newEncKey, client.ivParameterSpecs.get(objId));
     }
 
-    private Client() {
+    private Client(String kmsHost, int kmsPort,
+                   String stsHost, int stsPort,
+                   String symEncAlgo, String symEncAlgoDetails,
+                   String hashAlgo, int hashAlgoKeyLen) {
+        this.kmsHost = kmsHost;
+        this.kmsPort = kmsPort;
+        this.stsHost = stsHost;
+        this.stsPort = stsPort;
+
+        this.SYMMETRIC_ENCRYPTION_ALGO = symEncAlgo;
+        this.SYMMETRIC_ENCRYPTION_DETAILS = symEncAlgoDetails;
+        this.HASH_ALGO = hashAlgo;
+        this.HASH_KEY_LENGTH = hashAlgoKeyLen;
+
         uuid = UUID.randomUUID();
         ivParameterSpecs = new HashMap<>();
+
         LOG.info(String.format("Created a client with an id: %s", uuid.toString()));
     }
 
-    private static void parseArgs(String[] args) {
-        if (args.length > 0) {
-            kmsPort = Integer.parseInt(args[0]);
-            LOG.info(String.format("Connecting to KMS on port %d", kmsPort));
-        }
+    private static Client createClient() {
+        JSONObject jsonObject = ConfigLoader.LoadConfig(configFile);
 
-        if (args.length > 1) {
-            stsPort = Integer.parseInt(args[1]);
-            LOG.info(String.format("Connection to STS on port %d", stsPort));
-        }
+        String kmsHost = (String) jsonObject.get(kmsHostName);
+        long kmsPort = (long) jsonObject.get(kmsPortName);
+        String stsHost = (String) jsonObject.get(stsHostName);
+        long stsPort = (long) jsonObject.get(stsPortName);
+
+        String symEncAlgo = (String) jsonObject.get(symAlgoName);
+        String symEncAlgoDetails = (String) jsonObject.get(symAlgoDetailsName);
+        String hashAlgo = (String) jsonObject.get(hashAlgoName);
+        long hashAlgoKeyLen = (long) jsonObject.get(hashKeyLenName);
+
+        Client client = new Client(
+                kmsHost, (int) kmsPort,
+                stsHost, (int) stsPort,
+                symEncAlgo, symEncAlgoDetails,
+                hashAlgo, (int) hashAlgoKeyLen);
+        return client;
     }
 
-    private void runKms(String kmsHost, int kmsPort) {
+    private static void parseArgs(String[] args) {
+
+    }
+
+    private void runKms() {
         try {
             dsaParameterSpec = (DSAParameterSpec) communicate(
                     kmsHost, kmsPort, genGetDomainParametersRequest(), processDomainParameters);
@@ -139,7 +180,7 @@ public class Client {
             BigInteger U = new BigInteger(entry.w).modPow(rr, dsaParameterSpec.getP());
 
             String v = (String) communicate(kmsHost, kmsPort, genRetrieveKeyRequest(U), processRetrieveKey);
-            while(v.equals("error")) {
+            while(v.equals(OP.Error)) {
                 LOG.warning("Sleeping because could not retrieve a key");
                 TimeUnit.MILLISECONDS.sleep(100);
                 v = (String) communicate(kmsHost, kmsPort, genRetrieveKeyRequest(U), processRetrieveKey);
@@ -213,9 +254,6 @@ public class Client {
         BigInteger G = new BigInteger(g);
 
         LOG.info("Successfully received domain parameters!");
-        LOG.info(String.format("Value of P:\n%s\n", P.toString()));
-        LOG.info(String.format("Value of Q:\n%s\n", Q.toString()));
-        LOG.info(String.format("Value of G:\n%s\n", G.toString()));
 
         return new DSAParameterSpec(P, Q, G);
     };
@@ -237,7 +275,6 @@ public class Client {
         JSONObject jsonObject = JsonParser.getJson(response);
 
         String comment = (String) jsonObject.get(OP.Comment);
-        LOG.info("Successfully received EnrollClient response!");
         LOG.info(comment);
 
         return (boolean) jsonObject.get(OP.Res);
@@ -320,7 +357,6 @@ public class Client {
 
         LOG.info("Successfully received a response from storage!");
         LOG.info(String.format("Object ID:\n%s", objId));
-        LOG.info(String.format("W:\n%s", w));
         LOG.info(String.format("Encrypted message:\n%s", encryptedMessage));
 
         return new ClientInformation().new ClientEntry(objId, w, encryptedMessage);
@@ -379,7 +415,6 @@ public class Client {
 
         try {
             BigInteger encKey = dsaPublicKey.modPow(encryptionKey, dsaParameterSpec.getP());
-            encKeyToErase = encKey; // ERASE.
             SecretKeySpec secretKeySpec = prepareSecretKey(encKey);
 
             Cipher cipher = Cipher.getInstance(SYMMETRIC_ENCRYPTION_DETAILS);
@@ -401,10 +436,8 @@ public class Client {
     }
 
     private void decryptWithKey(String encryptedMessage, BigInteger encKey, IvParameterSpec ivParameterSpec) {
-        LOG.info(encKey.toString());
-        LOG.info(encKeyToErase.toString());
         String decryptedMessage = decryptMessage(encryptedMessage, encKey, ivParameterSpec);
-        if (!decryptedMessage.equals("error")) {
+        if (!decryptedMessage.equals(OP.Error)) {
             LOG.info("The message was decrypted successfully!");
         }
         LOG.info(String.format("Decrypted message:\n%s", decryptedMessage));
@@ -436,7 +469,7 @@ public class Client {
                 NoSuchAlgorithmException |
                 NoSuchPaddingException ex) {
             LOG.severe(String.format("Error decrypting a message: %s", ex.getMessage()));
-            return "error";
+            return OP.Error;
         }
 
         return decryptedMessage;
@@ -447,7 +480,7 @@ public class Client {
         MessageDigest sha = MessageDigest.getInstance(HASH_ALGO);
 
         key = sha.digest(key);
-        key = Arrays.copyOf(key, SHA_KEY_LENGTH);
+        key = Arrays.copyOf(key, HASH_KEY_LENGTH);
         return new SecretKeySpec(key, SYMMETRIC_ENCRYPTION_ALGO);
     }
 

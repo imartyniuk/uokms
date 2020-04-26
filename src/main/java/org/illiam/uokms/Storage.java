@@ -1,13 +1,7 @@
 package main.java.org.illiam.uokms;
 
 import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.math.BigInteger;
 import java.security.spec.DSAParameterSpec;
 import java.util.HashMap;
@@ -61,7 +55,7 @@ public class Storage {
     }
 
     private static void startStorageServer() {
-        JSONObject jsonObject = loadConfig();
+        JSONObject jsonObject = ConfigLoader.LoadConfig(configFile);
 
         long port = (long) jsonObject.get(portName);
         String kmsHost = (String) jsonObject.get(kmsHostName);
@@ -69,29 +63,6 @@ public class Storage {
 
         StorageServer storageServer = new StorageServer((int)port, kmsHost, (int)kmsPort);
         storageServer.Start();
-    }
-
-    private static JSONObject loadConfig() {
-        try {
-            ClassLoader classLoader = new Storage().getClass().getClassLoader();
-            InputStream is = classLoader.getResourceAsStream(configFile);
-            BufferedReader br = new BufferedReader(new InputStreamReader(is));
-
-            StringBuilder sb = new StringBuilder();
-            String text;
-            while((text = br.readLine()) != null) {
-                sb.append(text);
-            }
-
-            JSONParser jsonParser = new JSONParser();
-            return (JSONObject) jsonParser.parse(sb.toString());
-
-        } catch (IOException | ParseException ex) {
-            ex.printStackTrace();
-            System.exit(1);
-        }
-
-        return null;
     }
 
     public static void WriteStorageEntry(String client, String objId, String w, String encryptedMessage) {

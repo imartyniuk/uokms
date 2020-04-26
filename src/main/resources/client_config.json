@@ -1,0 +1,11 @@
+{
+  "kmsHost": "localhost",
+  "kmsPort": 9809,
+  "stsHost": "localhost",
+  "stsPort": 9708,
+
+  "symEncAlgo": "AES",
+  "symEncAlgoDetails": "AES/CBC/PKCS5Padding",
+  "hashAlgo": "SHA-1",
+  "hashKeyLen": 16
+}

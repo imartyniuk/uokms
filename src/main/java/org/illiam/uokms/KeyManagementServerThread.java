@@ -7,7 +7,6 @@ import org.json.simple.parser.ParseException;
 import java.io.*;
 import java.math.BigInteger;
 import java.net.Socket;
-import java.security.Key;
 import java.security.interfaces.DSAPublicKey;
 import java.security.spec.DSAParameterSpec;
 import java.util.logging.Level;
