@@ -2,6 +2,9 @@ package main.java.org.illiam.uokms;
 
 import org.json.simple.JSONObject;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.math.BigInteger;
 import java.security.*;
 import java.security.interfaces.DSAPrivateKey;
@@ -60,6 +63,11 @@ public class KeyManager {
     public static void main(String[] args) {
         try {
             parseArgs(args);
+            LogTime(Integer.toString(bitSize), "enc", false);
+            LogTime(Integer.toString(bitSize), "dec", false);
+            LogTime(Integer.toString(bitSize), "retrieve", false);
+            LogTime(Integer.toString(bitSize), "objspec", false);
+            LogTime(Integer.toString(bitSize), "upd", false);
 
             initializeEnvironment(bitSize);
             initializeClientStorage();
@@ -448,5 +456,18 @@ public class KeyManager {
         while(bitLen < qBitLen / 2) { bitLen = rnd.nextInt(qBitLen); }
 
         return BigInteger.probablePrime(bitLen, new Random());
+    }
+
+    public static void LogTime(Object val, String algo, boolean append) {
+        try {
+            File file = new File(String.format("%s.txt", algo));
+            FileWriter fw = new FileWriter(file, append);
+            fw.write(val.toString());
+            fw.write("\n");
+            fw.close();
+
+        } catch (IOException ex) {
+            LOG.warning(String.format("Error: %s", ex.getMessage()));
+        }
     }
 }

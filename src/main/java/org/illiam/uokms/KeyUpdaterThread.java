@@ -6,10 +6,7 @@ import org.json.simple.parser.ParseException;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.Socket;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
-import java.security.KeyPair;
-import java.security.NoSuchAlgorithmException;
+import java.security.*;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -78,6 +75,8 @@ public class KeyUpdaterThread extends Thread {
         try {
             KeyManager.Log(Level.INFO, String.format("Updating the key for client '%s'", name));
 
+            long startUpd = System.nanoTime();
+
             KeyPair newKeyPair = KeyManager.GenKeyPair();
             BigInteger delta = KeyManager.GenDelta(name, newKeyPair);
 
@@ -94,6 +93,10 @@ public class KeyUpdaterThread extends Thread {
             }
 
             KeyManager.SetUpdateState(name, false);
+
+            long endUpd = System.nanoTime();
+            KeyManager.LogTime(Double.toString( (endUpd - startUpd) / 1000000.0), "upd", true);
+
 
         } catch(InvalidKeyException | InvalidAlgorithmParameterException | NoSuchAlgorithmException |
                 IOException | ParseException ex) {

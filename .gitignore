@@ -28,3 +28,25 @@ hs_err_pid*
 
 # Maven
 target/
+
+# Measuring performance
+dec.txt
+dec_512.txt
+dec_1024.txt
+dec_2048.txt
+enc.txt
+enc_512.txt
+enc_1024.txt
+enc_2048.txt
+retrieve.txt
+retrieve_512.txt
+retrieve_1024.txt
+retrieve_2048.txt
+objspec.txt
+objspec_512.txt
+objspec_1024.txt
+objspec_2048.txt
+upd.txt
+upd_512.txt
+upd_1024.txt
+upd_2048.txt
