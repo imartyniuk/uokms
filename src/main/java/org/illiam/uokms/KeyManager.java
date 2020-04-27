@@ -2,9 +2,6 @@ package main.java.org.illiam.uokms;
 
 import org.json.simple.JSONObject;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.math.BigInteger;
 import java.security.*;
 import java.security.interfaces.DSAPrivateKey;
@@ -63,11 +60,6 @@ public class KeyManager {
     public static void main(String[] args) {
         try {
             parseArgs(args);
-            LogTime(Integer.toString(bitSize), "enc", false);
-            LogTime(Integer.toString(bitSize), "dec", false);
-            LogTime(Integer.toString(bitSize), "retrieve", false);
-            LogTime(Integer.toString(bitSize), "objspec", false);
-            LogTime(Integer.toString(bitSize), "upd", false);
 
             initializeEnvironment(bitSize);
             initializeClientStorage();
@@ -395,47 +387,32 @@ public class KeyManager {
                     DSAPrivateKey newPriv = (DSAPrivateKey) newKeyPair.getPrivate();
 
                     LOG.info(String.format("Generated delta:\n%s", delta));
-                    //LOG.info(String.format("Generated private:\n%s", newPriv.getX().toString()));
-                    //LOG.info(String.format("Old private:\n%s", oldPriv.getX().toString()));
-                    //LOG.info(String.format("Generated public:\n%s", newPub.getY().toString()));
-                    //LOG.info(String.format("Old public:\n%s", oldPub.getY().toString()));
 
                     BigInteger mult = newPub.getY().modPow(delta, dsaParameterSpec.getP());
                     LOG.info(String.format("New public to delta:\n%s", mult.toString()));
-                    if (mult.equals(oldPub.getY())) {
-                        LOG.info("OK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                    } else {
-                        LOG.severe("NO>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+                    if (!mult.equals(oldPub.getY())) {
+                        LOG.severe("New pub to delta != old pub");
+                        System.exit(1);
                     }
 
                     BigInteger newW = oldW.modPow(delta, dsaParameterSpec.getP());
-                    if (newW.modPow(newPriv.getX(), dsaParameterSpec.getP()).equals(initialPow)) {
-                        LOG.info("AGAIN OK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                    } else {
-                        LOG.severe("AGAIN NO>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+                    if (!newW.modPow(newPriv.getX(), dsaParameterSpec.getP()).equals(initialPow)) {
+                        LOG.severe("New w to new private key != initial w to initial private key");
+                        System.exit(1);
                     }
 
                     BigInteger rr = genEncryptionKey();
-                    //LOG.info(String.format("This is r:\n%s", r.toString()));
-                    //LOG.info(String.format("This is rr:\n%s", rr.toString()));
-
                     BigInteger u = newW.modPow(rr, dsaParameterSpec.getP());
-                    //LOG.info(String.format("This is u:\n%s", u.toString()));
-
                     BigInteger v = u.modPow(newPriv.getX(), dsaParameterSpec.getP());
-                    //LOG.info(String.format("This is v:\n%s", v.toString()));
-
                     BigInteger rrInverse = rr.modInverse(dsaParameterSpec.getQ());
-                    //LOG.info(String.format("This is inverse to rr:\n%s", rrInverse.toString()));
 
                     BigInteger newEnc = v.modPow(rrInverse, dsaParameterSpec.getP());
                     LOG.info(String.format("Old enc:\n%s", initialEnc.toString()));
                     LOG.info(String.format("New enc:\n%s", newEnc.toString()));
 
-                    if (newEnc.equals(initialEnc)) {
-                        LOG.info("AGAIN AGAIN OK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                    } else {
-                        LOG.severe("AGAIN AGAIN NO>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+                    if (!newEnc.equals(initialEnc)) {
+                        LOG.severe("New encryption key != initial encryption key");
+                        System.exit(1);
                     }
 
                     UpdateClient(dummy, newKeyPair);
@@ -456,18 +433,5 @@ public class KeyManager {
         while(bitLen < qBitLen / 2) { bitLen = rnd.nextInt(qBitLen); }
 
         return BigInteger.probablePrime(bitLen, new Random());
-    }
-
-    public static void LogTime(Object val, String algo, boolean append) {
-        try {
-            File file = new File(String.format("%s.txt", algo));
-            FileWriter fw = new FileWriter(file, append);
-            fw.write(val.toString());
-            fw.write("\n");
-            fw.close();
-
-        } catch (IOException ex) {
-            LOG.warning(String.format("Error: %s", ex.getMessage()));
-        }
     }
 }

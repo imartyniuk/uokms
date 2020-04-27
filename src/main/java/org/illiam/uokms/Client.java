@@ -148,7 +148,7 @@ public class Client {
      * */
     private static int INITIAL_NUM_OF_OBJECT = 3;
     private static int OBJ_LEN = 10;
-    private static int SLEEPING_TIME_BOUND = 2;
+    private static int SLEEPING_TIME_BOUND = 15;
     private static int ACT_PROB_PARAM = 8;
 
     private void runSimulationClient() {
@@ -199,20 +199,17 @@ public class Client {
                     String objId = objects.get(expectedStr);
                     IvParameterSpec ivParameterSpec = ivParameterSpecs.get(objId);
 
-                    long startRetrieve = System.nanoTime();
                     ClientInformation.ClientEntry entry = this.getObject(objId);
                     if (entry == null) {
                         LOG.severe("Did not retrieve from storage, aborting this simulation round");
                         continue;
                     }
 
-                    long startObjSpec = System.nanoTime();
                     BigInteger encKey = this.getObjectSpecificKey(entry);
                     if (encKey == null) {
                         LOG.severe("Did not retrieve the object-specific key, aborting this simulation round");
                         continue;
                     }
-                    long endObjSpec = System.nanoTime();
 
                     String decryptedObject = this.decryptWithKey(entry.encryptedObject, encKey, ivParameterSpec);
                     if (decryptedObject == null) {
@@ -228,9 +225,6 @@ public class Client {
                                 concat("GetObj -> UpdKey -> GetKey\n").
                                 concat("Please, feel free to discard the object data and retry the process"));
                     }
-                    long endRetrieve = System.nanoTime();
-                    logTime(Double.toString(getMilliSec(startRetrieve, endRetrieve)), "retrieve");
-                    logTime(Double.toString(getMilliSec(startObjSpec, endObjSpec)), "objspec");
 
                     LOG.info("This simulation run was successful!");
                 }
@@ -339,9 +333,6 @@ public class Client {
             case "-i":
                 mode = MODE.INTERACTIVE;
                 break;
-            case "-r": // REMOVE!!!!!!!!!!!!!!!!!!!!
-                parseTime();
-                System.exit(0);
             default:
                 LOG.severe(String.format(
                         "Expected '-s' for SIMULATION mode and '-i' for INTERACTIVE mode. Got '%s'", args[0]));
@@ -721,15 +712,10 @@ public class Client {
         ivParameterSpecs.put(objId, ivParameterSpec);
 
         BigInteger w = dsaParameterSpec.getG().modPow(r, dsaParameterSpec.getP());
-
-        long startEnc = System.nanoTime();
         String encryptedObject = encryptObject(obj, r, ivParameterSpec);
         if (encryptedObject == null) {
             throw new InvalidParameterException("Failed to encrypt the object");
         }
-        long endEnc = System.nanoTime();
-        logTime(Double.toString(getMilliSec(startEnc, endEnc)), "enc");
-
         LOG.info(String.format("The object was encrypted successfully: '%s'", encryptedObject));
 
         JSONObject jsonObject = new JSONObject();
@@ -765,14 +751,11 @@ public class Client {
     }
 
     private String decryptWithKey(String encryptedObject, BigInteger encKey, IvParameterSpec ivParameterSpec) {
-        long startDec = System.nanoTime();
         String decryptedObject = decryptObject(encryptedObject, encKey, ivParameterSpec);
         if (decryptedObject.equals(OP.Error)) {
             LOG.info("The object was not decrypted successfully!");
             return null;
         }
-        long endDec = System.nanoTime();
-        logTime(Double.toString(getMilliSec(startDec, endDec)), "dec");
 
         return decryptedObject;
     }
@@ -830,64 +813,4 @@ public class Client {
                 .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
                 .toString();
     }
-
-    private void logTime(Object val, String algo) {
-        try {
-            File file = new File(String.format("%s.txt", algo));
-            FileWriter fw = new FileWriter(file, true);
-            fw.write(val.toString());
-            fw.write("\n");
-            fw.close();
-
-        } catch (IOException ex) {
-            LOG.warning(String.format("Error: %s", ex.getMessage()));
-        }
-    }
-
-    private double getMilliSec(long s, long e) {
-        return (e - s) / 1000000.0;
-    }
-
-    private static void parseTime() {
-        try {
-            parseTimeFile("upd");
-            parseTimeFile("enc");
-            parseTimeFile("dec");
-            parseTimeFile("retrieve");
-            parseTimeFile("objspec");
-
-        } catch (IOException ex) {
-            LOG.warning(ex.getMessage());
-        }
-
-    }
-
-    private static void parseTimeFile(String name) throws IOException {
-        File file = new File(String.format("%s.txt", name));
-        FileReader fr = new FileReader(file);
-        BufferedReader br = new BufferedReader(fr);
-
-        String str = br.readLine();
-        int bs = Integer.parseInt(str);
-        int n = 0;
-        double avg = 0;
-
-        while((str = br.readLine()) != null) {
-            double cur = Double.parseDouble(str);
-            System.out.println(cur);
-
-            avg += cur;
-            n += 1;
-        }
-
-        avg = avg / n;
-
-        br.close();
-
-        File f = new File (String.format("%s_%s.txt", name, Integer.toString(bs)));
-        FileWriter fw = new FileWriter(f);
-        fw.write(Double.toString(avg));
-        fw.close();
-    }
-
 }

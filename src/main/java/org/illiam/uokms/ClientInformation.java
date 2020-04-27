@@ -7,8 +7,6 @@ import java.util.logging.Level;
 public class ClientInformation {
 
     public class ClientEntry {
-        //public final long publicKeyRevision;
-
         public final String objId;
         public String w;
         public final String encryptedObject;
