@@ -7,8 +7,8 @@ To compile everything run:
 or (recommended):
 `mvn compile` from the root repository.
 
-To rebuild the package run:
-`mvn clean package`
+To build the package run:
+`mvn package`
 
 To start the KeyManager run:
 `java -cp target/kms.jar main.java.org.illiam.uokms.KeyManager 1024`
@@ -16,5 +16,8 @@ To start the KeyManager run:
 To start the Storage run:
 `java -cp target/storage.jar main.java.org.illiam.uokms.Storage`
 
-To start the Client run:
-`java -cp target/client.jar main.java.org.illiam.uokms.Client`
+To start the Client in the SIMULATION mode run:
+`java -cp target/client.jar main.java.org.illiam.uokms.Client -s`
+
+To start the Client in the INTERACTIVE mode run:
+`java -cp target/client.jar main.java.org.illiam.uokms.Client -i`
