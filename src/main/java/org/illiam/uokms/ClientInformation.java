@@ -36,7 +36,9 @@ public class ClientInformation {
     }
 
     public void SetCurrentPublicKeyRevision(long pubKeyRevision) {
-        currentPubKeyRevision = pubKeyRevision;
+        if (pubKeyRevision >= currentPubKeyRevision) {
+            currentPubKeyRevision = pubKeyRevision;
+        }
     }
 
     public long GetCurrentPublicKeyRevision() {
