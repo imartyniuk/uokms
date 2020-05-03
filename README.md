@@ -1,6 +1,6 @@
 # uokms
 
-Updatable Oblivious Key Management System
+Oblivious Key Management System which supports Update operation.
 
 To compile everything run:
 `javac -d out src/*.java`
@@ -11,7 +11,7 @@ To build the package run:
 `mvn package`
 
 To start the KeyManager run:
-`java -cp target/kms.jar main.java.org.illiam.uokms.KeyManager 1024`
+`java -cp target/kms.jar main.java.org.illiam.uokms.KeyManager`
 
 To start the Storage run:
 `java -cp target/storage.jar main.java.org.illiam.uokms.Storage`
