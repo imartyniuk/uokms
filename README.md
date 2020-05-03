@@ -1,6 +1,6 @@
-# uokms
+# Oblivious Key Management System
 
-Oblivious Key Management System which supports Update operation.
+Oblivious Key Management System with Key Rotation.
 
 To compile everything run:
 `javac -d out src/*.java`
